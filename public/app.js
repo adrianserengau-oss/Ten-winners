@@ -56,10 +56,14 @@
     if (!inPi()) return say('Open this app in the Pi Browser to connect and buy tickets.', 'err');
     try {
       await piReady;
-      const a = await Pi.authenticate(['username'], (p) => {
+      if (!piReady) throw new Error('Pi SDK has not been initialized. Please refresh the app in Pi Browser.');
+      await piReady;
+      const a = await window.Pi.authenticate(['username'], (p) => {
         // Incomplete payments are resolved after sign-in has established the app session.
         window.__tenWinnersIncompletePayment = p;
       });
+      if (!a || typeof a.accessToken !== 'string' || !a.accessToken) throw new Error('Pi did not return an access token. Please try signing in again.');
+      // The server exchanges this access token with Pi App Studio and trusts only its returned identity.
       const session = await api('signin', { accessToken: a.accessToken });
       signedIn = true;
       nick = session.nickname || '';
@@ -82,7 +86,7 @@
   function buy(q) {
     if (!nick) return say('Save a nickname first.', 'err');
     say('Opening Pi Wallet…');
-    Pi.createPayment(
+    window.Pi.createPayment(
       { amount: q * S.price, memo: 'Ten Winners: ' + q + ' ticket' + (q > 1 ? 's' : '') + ' for the ' + S.round + ' draw', metadata: { qty: q, round: S.round } },
       {
         onReadyForServerApproval: (id) => api('pay', { action: 'approve', paymentId: id }).catch((e) => say(e.message, 'err')),
@@ -97,10 +101,22 @@
   $('saveNick').onclick = saveNick;
   document.querySelectorAll('[data-buy]').forEach((b) => (b.onclick = () => buy(+b.dataset.buy)));
 
+  // Initialize the Pi SDK exactly once, and wait for it before allowing authentication.
+  // The SDK detects sandbox mode automatically; do not pass a sandbox option to Pi.init.
+  if (inPi()) {
+    piReady = (async () => {
+      await window.Pi.init({ version: '2.0' });
+      return true;
+    })();
+    piReady.catch((e) => {
+      console.error('Pi SDK initialization failed:', e);
+      say('Pi SDK could not initialize. Please refresh this app in Pi Browser.', 'err');
+    });
+  }
+
   (async () => {
     try { await load(); } catch (e) { say('Could not load the game. Please refresh.', 'err'); return; }
-    if (inPi()) Pi.init({ version: '2.0', sandbox: S.sandbox });
-    else say('You are viewing in a regular browser. Open this app in the Pi Browser to buy tickets.');
+    if (!inPi()) say('You are viewing in a regular browser. Open this app in the Pi Browser to buy tickets.');
     setInterval(() => load().catch(() => {}), 60000);
   })();
 })();
