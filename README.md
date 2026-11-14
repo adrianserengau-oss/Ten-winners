@@ -2,7 +2,7 @@
 
 A monthly community draw for the Pi Browser. Players buy 1 π tickets (max 10 each). On the 1st of every month at 12:00 UTC, 10 random winners split 90% of the pool equally; 10% is used to organize the game. Winners are shown by in-app nickname.
 
-No npm packages are needed. The front end is static (`public/`), the back end is Vercel serverless functions (`api/`), and data lives in Upstash Redis.
+No npm packages are needed. The front end is static (`public/`), the back end is Vercel serverless functions (`api/`), and data lives in Upstash Redis. Pi sign-in exchanges the SDK access token with Pi App Studio server-side and stores only the returned App Studio identity in a signed HttpOnly cookie.
 
 ## Before you start: read this
 
@@ -19,7 +19,7 @@ No npm packages are needed. The front end is static (`public/`), the back end is
 
 **3. Add the database.** In your Vercel project open *Storage* (or the Marketplace), add **Upstash Redis** and connect it to the project. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically.
 
-**4. Register the app with Pi.** Open `develop.pi` in the Pi Browser, create an app, and set its URL to your Vercel address (for example `https://ten-winners.vercel.app`). Copy the **Server API Key**. Follow the Developer Portal steps for domain verification: if it asks you to host a validation key, paste it into `public/validation-key.txt` and redeploy (the file is served at `/validation-key.txt`).
+**4. Register the app with Pi.** Open `develop.pi` in the Pi Browser, create an app, and set its URL to your Vercel address (for example `https://ten-winners.vercel.app`). Copy the **Server API Key**. Follow the Developer Portal steps for domain verification: if it asks you to host a validation key, paste it into `public/validation-key.txt` and redeploy (the file is served at `/validation-key.txt`). App Studio validation uses the separate `public/pi-app-validation.txt` file..
 
 **5. Set environment variables** (Vercel → Settings → Environment Variables, then redeploy):
 
@@ -29,6 +29,7 @@ No npm packages are needed. The front end is static (`public/`), the back end is
 | `PI_SANDBOX` | `true` for testing, `false` for the live network |
 | `CRON_SECRET` | a long random string (Vercel sends it to the cron job) |
 | `ADMIN_SECRET` | a different long random string |
+| `APP_SESSION_SECRET` | a random secret of at least 32 characters for signed app sessions |
 
 **6. Test in the sandbox.** Keep `PI_SANDBOX=true` and open the sandbox link from the Developer Portal in the Pi Browser. Connect, set a nickname, buy a ticket, and confirm the count and pool change. Then check on desktop and mobile browsers: the app loads and shows the game, and says to open the Pi Browser to buy.
 

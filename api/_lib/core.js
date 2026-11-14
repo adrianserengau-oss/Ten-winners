@@ -50,10 +50,44 @@ function pick(seed, tickets, k) {
   return a.slice(0, k).sort((x, y) => x.n - y.n);
 }
 
+function signSession(payload) {
+  const secret = process.env.APP_SESSION_SECRET;
+  if (!secret || secret.length < 32) throw new Error('APP_SESSION_SECRET must be set to a random secret of at least 32 characters.');
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
+  return encoded + '.' + signature;
+}
+
+function createSessionCookie(user) {
+  const value = signSession({
+    uid: user.uid,
+    username: user.username,
+    sessionToken: user.sessionToken,
+    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  });
+  return 'tw_session=' + value + '; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=None';
+}
+
+function readSession(req) {
+  try {
+    const raw = (req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith('tw_session='));
+    if (!raw) return null;
+    const value = raw.slice('tw_session='.length);
+    const parts = value.split('.');
+    if (parts.length !== 2) return null;
+    const secret = process.env.APP_SESSION_SECRET;
+    if (!secret || secret.length < 32) return null;
+    const expected = crypto.createHmac('sha256', secret).update(parts[0]).digest();
+    const actual = Buffer.from(parts[1], 'base64url');
+    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    if (!payload.uid || !payload.username || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return { uid: String(payload.uid), username: String(payload.username) };
+  } catch { return null; }
+}
+
 async function authUser(req) {
-  const t = (req.headers.authorization || '').replace(/^Bearer /, '');
-  if (!t) return null;
-  try { const me = await pi('/me', { token: t }); return { uid: me.uid, username: me.username }; } catch { return null; }
+  return readSession(req);
 }
 const nickOf = async (uid) => (await r('HGET', 'nicks', uid)) || 'Pioneer-' + uid.slice(0, 4);
 
@@ -104,4 +138,4 @@ const guard = (fn) => async (req, res) => {
 };
 const bad = (msg) => Object.assign(new Error(msg), { pub: msg });
 
-module.exports = { C, r, pi, nextDraw, rid, dueAt, sha, seedFor, pick, authUser, nickOf, issue, draw, guard, bad };
+module.exports = { C, r, pi, nextDraw, rid, dueAt, sha, seedFor, pick, authUser, createSessionCookie, nickOf, issue, draw, guard, bad };

@@ -2,12 +2,13 @@
   const $ = (id) => document.getElementById(id);
   const esc = (t) => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
   const fmt = (n) => (+n).toFixed(4).replace(/\.?0+$/, '');
-  let S, token = null, nick = '';
+  let S, signedIn = false, nick = '', piReady = null;
 
   async function api(path, body) {
     const x = await fetch('/api/' + path, {
       method: body ? 'POST' : 'GET',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: body ? JSON.stringify(body) : undefined,
     });
     const j = await x.json().catch(() => ({}));
@@ -44,8 +45,8 @@
     $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Tickets are refunded.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their in-app nicknames.';
     $('slots').innerHTML = Array.from({ length: S.winners }, (_, i) => w[i] ? '<div class="slot won"><b>#' + w[i].n + '</b>' + esc(w[i].nick) + '</div>' : '<div class="slot"><b>–</b>open</div>').join('');
     $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, pool ' + fmt(h.pool) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
-    $('connectBox').hidden = !!token;
-    $('buyBox').hidden = !token;
+    $('connectBox').hidden = signedIn;
+    $('buyBox').hidden = !signedIn;
     document.querySelectorAll('[data-buy]').forEach((b) => { b.disabled = !nick || S.mine + +b.dataset.buy > S.max; });
   }
 
@@ -54,13 +55,23 @@
   async function connect() {
     if (!inPi()) return say('Open this app in the Pi Browser to connect and buy tickets.', 'err');
     try {
-      const a = await Pi.authenticate(['username', 'payments'], (p) => api('pay', { action: 'incomplete', paymentId: p.identifier }).then(load).catch(() => {}));
-      token = a.accessToken;
-      nick = (await api('signin', {})).nickname;
+      await piReady;
+      const a = await Pi.authenticate(['username'], (p) => {
+        // Incomplete payments are resolved after sign-in has established the app session.
+        window.__tenWinnersIncompletePayment = p;
+      });
+      const session = await api('signin', { accessToken: a.accessToken });
+      signedIn = true;
+      nick = session.nickname || '';
       $('nick').value = nick;
+      if (window.__tenWinnersIncompletePayment) {
+        const pending = window.__tenWinnersIncompletePayment;
+        window.__tenWinnersIncompletePayment = null;
+        await api('pay', { action: 'incomplete', paymentId: pending.identifier }).catch(() => {});
+      }
       await load();
       say(nick ? 'Connected.' : 'Connected. Choose a nickname to start buying tickets.', 'ok');
-    } catch (e) { token = null; say(e.message || 'Could not connect.', 'err'); }
+    } catch (e) { signedIn = false; say(e.message || 'Could not connect.', 'err'); }
   }
 
   async function saveNick() {
