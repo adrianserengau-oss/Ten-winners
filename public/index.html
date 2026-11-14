@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5B2E91">
+<meta name="description" content="Ten Winners: a monthly community draw. 10 random winners share the prize pool equally.">
+<title>Ten Winners – monthly community draw</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap">
+<style>
+:root{--bg:#F4F0FB;--surface:#fff;--ink:#24143F;--muted:#6B5F85;--line:#DCD3EE;--violet:#5B2E91;--gold:#E8A317;--goldbg:#FFF0C7;--on-violet:#fff;--ok:#1F7A4D;--err:#B3261E}
+@media (prefers-color-scheme:dark){:root{--bg:#150C28;--surface:#21143A;--ink:#F1EBFB;--muted:#B2A5CC;--line:#3A2A5E;--violet:#A77BE6;--gold:#F5B63D;--goldbg:#3E2F10;--on-violet:#150C28;--ok:#6FD39F;--err:#FF8A80}}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+main{max-width:560px;margin:0 auto;padding:16px 16px 48px}
+.banner{background:var(--goldbg);border:1px solid var(--gold);border-radius:10px;padding:8px 12px;font-size:14px;margin-bottom:8px}
+h1{font-size:28px;line-height:1.1;margin:20px 0 4px;font-weight:800}
+h2{font-size:18px;margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 20px}
+.pool{background:var(--violet);color:var(--on-violet);border-radius:18px;padding:20px}
+.pool .n{font-size:56px;font-weight:800;line-height:1.05;letter-spacing:-1px}
+.pool p{margin:6px 0 0;font-size:14px}
+.slots{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0 16px}
+.slot{border:1.5px dashed var(--line);border-radius:12px;padding:8px 2px;text-align:center;font-size:12px;min-height:62px;background:var(--surface);overflow-wrap:anywhere}
+.slot b{display:block;font-size:16px}
+.slot.won{border:1.5px solid var(--gold);background:var(--goldbg)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+button{font:inherit;font-weight:700;border-radius:10px;border:1.5px solid var(--violet);background:var(--surface);color:var(--violet);padding:10px 16px;min-height:44px;cursor:pointer}
+button.primary{background:var(--violet);color:var(--on-violet)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+input{font:inherit;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:55%;min-height:44px}
+#msg{min-height:22px;font-size:14px;margin:8px 0 0}#msg.err{color:var(--err)}#msg.ok{color:var(--ok)}
+ul{list-style:none;margin:0;padding:0}li{padding:8px 0;border-top:1px solid var(--line);font-size:14px;overflow-wrap:anywhere}li:first-child{border-top:0}
+.muted{color:var(--muted)}.small{font-size:14px;color:var(--muted)}
+code{font-size:12px;word-break:break-all}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<div class="banner" id="bn" hidden></div>
+<h1>Ten Winners</h1>
+<p class="sub">A new draw is held automatically on the 1st day of every month at 12:00 PM UTC. 10 tickets are drawn at random, and the winners are announced here by their in-app nicknames.</p>
+
+<section class="pool" aria-live="polite">
+  <small>Prize pool for the next draw</small>
+  <div class="n"><span id="pool">0</span> π</div>
+  <p>Next draw: <b id="nd">…</b></p>
+  <p><span id="tk">0</span> tickets sold. Each winner gets <b id="share">0</b> π. Game organization (10%): <b id="fee">0</b> π.</p>
+</section>
+
+<h2 style="margin:20px 0 0">Winners of the last draw</h2>
+<p class="small" style="margin:0" id="lastinfo">Winners are shown by their in-app nicknames.</p>
+<div class="slots" id="slots"></div>
+
+<section class="card">
+  <div id="connectBox">
+    <h2>Join the draw</h2>
+    <p class="small" style="margin-top:0">Connect with Pi to sign in and buy tickets. Tickets are paid in Pi from your Pi Wallet.</p>
+    <button class="primary" id="connect">Connect with Pi</button>
+  </div>
+  <div id="buyBox" hidden>
+    <div class="row"><label for="nick"><b>Your nickname</b></label><input id="nick" maxlength="20" autocomplete="off" placeholder="3–20 letters or numbers"></div>
+    <div class="btns" style="margin:0 0 12px"><button id="saveNick">Save nickname</button></div>
+    <div class="row muted"><span>Your tickets this round</span><span id="mine">0 / 10</span></div>
+    <div class="row"><b>Your chance this round</b><b id="odds">—</b></div>
+    <div class="btns">
+      <button class="primary" data-buy="1">Buy 1 ticket (1 π)</button>
+      <button data-buy="5">Buy 5</button>
+      <button data-buy="10">Buy 10</button>
+    </div>
+  </div>
+  <p class="small" style="margin:12px 0 0"><b>The more tickets you buy, the higher your chance to win.</b> Each person can hold up to 10 tickets per draw.</p>
+  <p id="msg" role="status"></p>
+</section>
+
+<section class="card">
+  <h2>How it works</h2>
+  <p class="small" style="margin:0 0 8px">Of the total amount accumulated in each draw 10% will be used to organize the game. The remaining 90% is split equally between the 10 winners.</p>
+  <p class="small" style="margin:0 0 8px">If fewer than 10 tickets are sold, the draw is cancelled and every ticket is refunded.</p>
+  <p class="small" style="margin:0">Fair draw: before tickets go on sale, a secret seed is locked in. Its fingerprint is shown below and the seed is revealed after the draw, so anyone can check the result.</p>
+  <p class="small">Fingerprint for this round: <code id="commit">…</code></p>
+</section>
+
+<section class="card">
+  <h2>Past draws</h2>
+  <ul id="hist"><li class="muted">No draws yet.</li></ul>
+</section>
+
+<p class="small">Ten Winners is an independent app and is not affiliated with or endorsed by Pi Network. Check that games of chance are allowed where you live before you play.</p>
+</main>
+<script src="https://sdk.minepi.com/pi-sdk.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

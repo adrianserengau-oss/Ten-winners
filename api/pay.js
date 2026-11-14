@@ -1,0 +1,32 @@
+const { C, r, pi, nextDraw, rid, issue, guard, bad } = require('./_lib/core');
+
+// U2A payment flow (Pi docs): approve -> user signs in Pi Wallet -> complete.
+// Everything is re-checked against the Platform API; nothing sent by the browser is trusted.
+async function approve(paymentId) {
+  const p = await pi('/payments/' + paymentId, { key: 1 });
+  const m = p.metadata || {}, qty = +m.qty, id = rid(nextDraw());
+  const have = +(await r('HGET', 'cnt:' + id, p.user_uid)) || 0;
+  const ok = p.direction === 'user_to_app' && m.round === id && Number.isInteger(qty) && qty >= 1 && qty <= C.MAX
+    && Number(p.amount) === qty * C.PRICE && have + qty <= C.MAX;
+  if (!ok) { await pi('/payments/' + paymentId + '/cancel', { method: 'POST', key: 1 }).catch(() => {}); throw bad('This purchase is not valid for the current round.'); }
+  await pi('/payments/' + paymentId + '/approve', { method: 'POST', key: 1 });
+}
+
+async function complete(paymentId, txid) {
+  const p = await pi('/payments/' + paymentId, { key: 1 });
+  if (!p.status.developer_completed) await pi('/payments/' + paymentId + '/complete', { method: 'POST', key: 1, body: { txid } });
+  return issue(p);
+}
+
+module.exports = guard(async (req, res) => {
+  const { action, paymentId, txid } = req.body || {};
+  if (req.method !== 'POST' || !/^[\w-]{6,100}$/.test(paymentId || '')) throw bad('Bad request.');
+  if (action === 'approve') await approve(paymentId);
+  else if (action === 'complete') { if (!txid) throw bad('Missing transaction id.'); res.setHeader('X-Result', await complete(paymentId, txid)); }
+  else if (action === 'incomplete') { // payment left unfinished from an earlier session
+    const p = await pi('/payments/' + paymentId, { key: 1 });
+    if (p.transaction && p.transaction.txid) await complete(paymentId, p.transaction.txid);
+    else if (!p.status.developer_completed && !p.status.cancelled) await pi('/payments/' + paymentId + '/cancel', { method: 'POST', key: 1 });
+  } else throw bad('Unknown action.');
+  res.json({ ok: true });
+});

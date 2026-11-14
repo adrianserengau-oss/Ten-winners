@@ -1,0 +1,7 @@
+{
+  "crons": [{ "path": "/api/cron-draw", "schedule": "0 12 1 * *" }],
+  "headers": [
+    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }] },
+    { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }
+  ]
+}
