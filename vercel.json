@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron-draw",
-      "schedule": "0 12 1 * *"
+      "schedule": "0 20 * * 0"
     }
   ],
   "headers": [

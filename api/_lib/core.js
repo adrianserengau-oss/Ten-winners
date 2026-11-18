@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
-// ---- Game settings (if you change DRAW_HOUR_UTC, also change the cron in vercel.json) ----
-const C = { PRICE: 1, WINNERS: 10, MAX: 10, PAYOUT: 0.9, DRAW_HOUR_UTC: 12 };
+// ---- Weekly Sunday 20:00 UTC draw (keep vercel.json cron synchronized) ----
+const C = { PRICE: 1, WINNERS: 10, MAX: 10, PAYOUT: 0.9, DRAW_HOUR_UTC: 20 };
 
 const RU = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const RT = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -28,12 +28,18 @@ async function pi(path, { method = 'GET', key, token, body } = {}) {
 }
 
 const nextDraw = (now = new Date()) => {
-  let d = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, C.DRAW_HOUR_UTC);
-  if (d <= now.getTime()) d = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, C.DRAW_HOUR_UTC);
-  return new Date(d);
+  // UTC Sunday is day 0. At/after the cutoff, use the following Sunday.
+  const daysUntilSunday = (7 - now.getUTCDay()) % 7;
+  const d = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilSunday, C.DRAW_HOUR_UTC);
+  return new Date(d <= now.getTime() ? d + 7 * 24 * 60 * 60 * 1000 : d);
 };
 const rid = (d) => d.toISOString().slice(0, 10);
-const dueAt = (id) => Date.parse(id + 'T' + String(C.DRAW_HOUR_UTC).padStart(2, '0') + ':00:00Z');
+const dueAt = (id) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(id)) return NaN;
+  const time = Date.parse(id + 'T' + String(C.DRAW_HOUR_UTC).padStart(2, '0') + ':00:00Z');
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === id ? time : NaN;
+};
+const isWeeklyRound = (id) => Number.isFinite(dueAt(id)) && new Date(dueAt(id)).getUTCDay() === 0;
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 // Fairness: a secret seed is created per round and its hash is published up front.
@@ -96,7 +102,7 @@ async function issue(p) {
   const m = p.metadata || {}, id = m.round, qty = +m.qty, uid = p.user_uid;
   if (!(await r('SETNX', 'paid:' + p.identifier, '1'))) return 'duplicate';
   const have = +(await r('HGET', 'cnt:' + id, uid)) || 0;
-  if ((await r('EXISTS', 'drawn:' + id)) || have + qty > C.MAX) {
+  if (!isWeeklyRound(id) || dueAt(id) <= Date.now() || (await r('EXISTS', 'drawn:' + id)) || have + qty > C.MAX) {
     await r('HSET', 'payouts', p.identifier, JSON.stringify({ type: 'refund', round: id, uid, amount: qty * C.PRICE, status: 'pending' }));
     return 'refund';
   }
@@ -138,4 +144,4 @@ const guard = (fn) => async (req, res) => {
 };
 const bad = (msg) => Object.assign(new Error(msg), { pub: msg });
 
-module.exports = { C, r, pi, nextDraw, rid, dueAt, sha, seedFor, pick, authUser, createSessionCookie, nickOf, issue, draw, guard, bad };
+module.exports = { C, r, pi, nextDraw, rid, dueAt, isWeeklyRound, sha, seedFor, pick, authUser, createSessionCookie, nickOf, issue, draw, guard, bad };

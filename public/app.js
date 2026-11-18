@@ -28,11 +28,12 @@
   }
 
   function render() {
-    const pool = S.tickets * S.price;
+    const gross = S.tickets * S.price;
+    const pool = gross * S.payout;
     $('pool').textContent = fmt(pool);
     $('tk').textContent = S.tickets;
-    $('share').textContent = fmt(pool * S.payout / S.winners);
-    $('fee').textContent = fmt(pool * (1 - S.payout));
+    $('share').textContent = fmt(pool / S.winners);
+    $('fee').textContent = fmt(gross - pool);
     $('nd').textContent = new Date(S.nextDraw).toLocaleString([], { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     $('commit').textContent = S.commit;
     $('mine').textContent = S.mine + ' / ' + S.max;
