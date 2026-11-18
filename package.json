@@ -2,7 +2,7 @@
   "name": "ten-winners",
   "version": "1.0.0",
   "private": true,
-  "description": "Monthly community draw: 10 winners share the prize pool. Built for the Pi Browser, deployable on Vercel.",
+  "description": "Weekly community draw: 10 winners share the prize pool. Built for the Pi Browser, deployable on Vercel.",
   "engines": {
     "node": "24.x"
   }

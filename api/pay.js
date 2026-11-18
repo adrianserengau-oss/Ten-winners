@@ -16,8 +16,26 @@ async function approve(paymentId, uid) {
 async function complete(paymentId, txid, uid) {
   const p = await pi('/payments/' + paymentId, { key: 1 });
   if (p.user_uid !== uid) throw bad('This payment does not belong to the signed-in user.');
-  if (!p.status.developer_completed) await pi('/payments/' + paymentId + '/complete', { method: 'POST', key: 1, body: { txid } });
-  return issue(p);
+  if (p.direction !== 'user_to_app' || !p.metadata || !Number.isInteger(Number(p.metadata.qty)) ||
+      Number(p.metadata.qty) < 1 || Number(p.metadata.qty) > C.MAX ||
+      Number(p.amount) !== Number(p.metadata.qty) * C.PRICE) {
+    throw bad('Payment metadata does not match a valid ticket purchase.');
+  }
+  if (p.status && p.status.cancelled) throw bad('Payment was cancelled.');
+  if (p.transaction && p.transaction.txid && p.transaction.txid !== txid) throw bad('Transaction ID does not match the Pi payment.');
+  if (!p.status || !p.status.developer_completed) {
+    await pi('/payments/' + paymentId + '/complete', { method: 'POST', key: 1, body: { txid } });
+  }
+  const verified = await pi('/payments/' + paymentId, { key: 1 });
+  if (verified.user_uid !== uid || verified.direction !== 'user_to_app' ||
+      !verified.status || !verified.status.developer_completed ||
+      !verified.transaction || verified.transaction.txid !== txid ||
+      verified.metadata?.round !== p.metadata.round ||
+      Number(verified.metadata?.qty) !== Number(p.metadata.qty) ||
+      Number(verified.amount) !== Number(p.amount)) {
+    throw new Error('Payment completion could not be independently verified.');
+  }
+  return issue(verified);
 }
 
 module.exports = guard(async (req, res) => {
@@ -26,7 +44,7 @@ module.exports = guard(async (req, res) => {
   const { action, paymentId, txid } = req.body || {};
   if (req.method !== 'POST' || !/^[\w-]{6,100}$/.test(paymentId || '')) throw bad('Bad request.');
   if (action === 'approve') await approve(paymentId, user.uid);
-  else if (action === 'complete') { if (!txid) throw bad('Missing transaction id.'); res.setHeader('X-Result', await complete(paymentId, txid, user.uid)); }
+  else if (action === 'complete') { if (typeof txid !== 'string' || !/^[a-zA-Z0-9_-]{6,150}$/.test(txid)) throw bad('Invalid transaction id.'); res.setHeader('X-Result', await complete(paymentId, txid, user.uid)); }
   else if (action === 'incomplete') { // payment left unfinished from an earlier session
     const p = await pi('/payments/' + paymentId, { key: 1 });
     if (p.user_uid !== user.uid) throw bad('This payment does not belong to the signed-in user.');

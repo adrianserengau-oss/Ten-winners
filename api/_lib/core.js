@@ -68,10 +68,9 @@ function createSessionCookie(user) {
   const value = signSession({
     uid: user.uid,
     username: user.username,
-    sessionToken: user.sessionToken,
     exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
   });
-  return 'tw_session=' + value + '; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=None';
+  return 'tw_session=' + value + '; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Lax';
 }
 
 function readSession(req) {
@@ -100,7 +99,9 @@ const nickOf = async (uid) => (await r('HGET', 'nicks', uid)) || 'Pioneer-' + ui
 // Credit tickets once per payment (idempotent). Late or over-limit payments go to the refund list.
 async function issue(p) {
   const m = p.metadata || {}, id = m.round, qty = +m.qty, uid = p.user_uid;
-  if (!(await r('SETNX', 'paid:' + p.identifier, '1'))) return 'duplicate';
+  // Payment crediting requires a durable, atomic ledger transaction.
+  // Do not acknowledge payments as ticket credits until that transaction exists.
+  throw new Error('Ticket crediting is temporarily disabled pending atomic ledger implementation.');
   const have = +(await r('HGET', 'cnt:' + id, uid)) || 0;
   if (!isWeeklyRound(id) || dueAt(id) <= Date.now() || (await r('EXISTS', 'drawn:' + id)) || have + qty > C.MAX) {
     await r('HSET', 'payouts', p.identifier, JSON.stringify({ type: 'refund', round: id, uid, amount: qty * C.PRICE, status: 'pending' }));

@@ -91,7 +91,7 @@
       { amount: q * S.price, memo: 'Ten Winners: ' + q + ' ticket' + (q > 1 ? 's' : '') + ' for the ' + S.round + ' draw', metadata: { qty: q, round: S.round } },
       {
         onReadyForServerApproval: (id) => api('pay', { action: 'approve', paymentId: id }).catch((e) => say(e.message, 'err')),
-        onReadyForServerCompletion: (id, txid) => api('pay', { action: 'complete', paymentId: id, txid }).then(() => { say('Payment confirmed. Your tickets are in the draw.', 'ok'); return load(); }).catch((e) => say(e.message, 'err')),
+        onReadyForServerCompletion: (id, txid) => api('pay', { action: 'complete', paymentId: id, txid }).then(() => { say('Payment processed. Ticket crediting is pending verification; contact support before retrying.', 'err'); return load(); }).catch((e) => say(e.message, 'err')),
         onCancel: () => say('Payment cancelled.'),
         onError: (e) => say((e && e.message) || 'Payment failed.', 'err'),
       }
