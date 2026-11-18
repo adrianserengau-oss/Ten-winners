@@ -3,6 +3,8 @@ const { C, r, pi, nextDraw, rid, issue, authUser, guard, bad } = require('./_lib
 // U2A payment flow (Pi docs): approve -> user signs in Pi Wallet -> complete.
 // Everything is re-checked against the Platform API; nothing sent by the browser is trusted.
 async function approve(paymentId, uid) {
+  // No new paid entries until atomic ticket crediting and payout settlement are implemented.
+  throw bad('Ticket purchases are temporarily unavailable while payment safety checks are completed.');
   const p = await pi('/payments/' + paymentId, { key: 1 });
   if (p.user_uid !== uid) throw bad('This payment does not belong to the signed-in user.');
   const m = p.metadata || {}, qty = +m.qty, id = rid(nextDraw());
