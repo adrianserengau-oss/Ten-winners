@@ -96,47 +96,48 @@ async function authUser(req) {
 }
 const nickOf = async (uid) => (await r('HGET', 'nicks', uid)) || 'Pioneer-' + uid.slice(0, 4);
 
-// Credit tickets once per payment (idempotent). Late or over-limit payments go to the refund list.
+// Payment credits and draw publication use Redis Lua transactions; no partial ledger writes.
 async function issue(p) {
-  const m = p.metadata || {}, id = m.round, qty = +m.qty, uid = p.user_uid;
-  // Payment crediting requires a durable, atomic ledger transaction.
-  // Do not acknowledge payments as ticket credits until that transaction exists.
-  throw new Error('Ticket crediting is temporarily disabled pending atomic ledger implementation.');
-  const have = +(await r('HGET', 'cnt:' + id, uid)) || 0;
-  if (!isWeeklyRound(id) || dueAt(id) <= Date.now() || (await r('EXISTS', 'drawn:' + id)) || have + qty > C.MAX) {
-    await r('HSET', 'payouts', p.identifier, JSON.stringify({ type: 'refund', round: id, uid, amount: qty * C.PRICE, status: 'pending' }));
-    return 'refund';
-  }
-  for (let i = 0; i < qty; i++) {
-    const n = await r('INCR', 'seq:' + id);
-    await r('RPUSH', 'tickets:' + id, JSON.stringify({ n, uid }));
-  }
-  await r('HINCRBY', 'cnt:' + id, uid, qty);
-  await r('SADD', 'rounds:open', id);
-  return 'ok';
+  const { ISSUE } = require('./ledger');
+  const m = p.metadata || {}, id = m.round, qty = Number(m.qty), uid = p.user_uid;
+  if (typeof p.identifier !== 'string' || !/^[\\w-]{6,100}$/.test(p.identifier) ||
+      typeof uid !== 'string' || !uid || !Number.isInteger(qty) || qty < 1 || qty > C.MAX ||
+      Number(p.amount) !== qty * C.PRICE || p.direction !== 'user_to_app' ||
+      !p.status?.developer_completed) throw bad('Invalid or incomplete Pi payment.');
+  if (typeof id !== 'string' || !isWeeklyRound(id)) throw bad('Invalid draw round.');
+  // The published cutoff is authoritative even for already-finished payments.
+  return r('EVAL', ISSUE, 0, p.identifier, id, uid, qty, dueAt(id), Date.now(), C.MAX);
 }
 
 async function draw(id) {
-  if (!(await r('SETNX', 'drawn:' + id, '1'))) return null;
-  const t = (await r('LRANGE', 'tickets:' + id, 0, -1)).map((x) => JSON.parse(x)).sort((a, b) => a.n - b.n);
+  const { FINALIZE } = require('./ledger');
+  if (!isWeeklyRound(id) || dueAt(id) > Date.now()) throw bad('The weekly draw is not due.');
+  if (await r('EXISTS', 'result:' + id)) return null;
+  // Close the round before reading the ticket snapshot. A failed worker can retry safely.
+  await r('SETNX', 'closing:' + id, '1');
+  const t = (await r('LRANGE', 'tickets:' + id, 0, -1))
+    .map((x) => JSON.parse(x)).sort((a, b) => a.n - b.n);
   const seed = await seedFor(id);
   const res = { id, tickets: t.length, seed, commit: sha(seed) };
+  const payouts = [];
   if (t.length < C.WINNERS) {
-    res.cancelled = true; // not enough tickets: every ticket is refunded
-    for (const x of t) await r('HSET', 'payouts', id + ':' + x.n, JSON.stringify({ type: 'refund', round: id, uid: x.uid, amount: C.PRICE, status: 'pending' }));
+    res.cancelled = true;
+    for (const x of t) payouts.push({ id: id + ':' + x.n, record: {
+      type: 'refund', round: id, uid: x.uid, amount: C.PRICE, status: 'pending'
+    } });
   } else {
     const pool = t.length * C.PRICE;
     const share = Math.floor((pool * C.PAYOUT / C.WINNERS) * 1e7) / 1e7;
     Object.assign(res, { pool, share, fee: +(pool - share * C.WINNERS).toFixed(7), winners: [] });
     for (const w of pick(seed, t, C.WINNERS)) {
       res.winners.push({ n: w.n, nick: await nickOf(w.uid) });
-      await r('HSET', 'payouts', id + ':' + w.n, JSON.stringify({ type: 'prize', round: id, uid: w.uid, amount: share, status: 'pending' }));
+      payouts.push({ id: id + ':' + w.n, record: {
+        type: 'prize', round: id, uid: w.uid, amount: share, status: 'pending'
+      } });
     }
   }
-  await r('SET', 'result:' + id, JSON.stringify(res));
-  await r('LPUSH', 'history', id);
-  await r('SREM', 'rounds:open', id);
-  return res;
+  const result = await r('EVAL', FINALIZE, 0, id, JSON.stringify(res), JSON.stringify(payouts));
+  return result === 'ok' ? res : null;
 }
 
 const guard = (fn) => async (req, res) => {
