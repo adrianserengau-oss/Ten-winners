@@ -190,7 +190,6 @@
       if (!session.username) throw new Error('The Pi account username could not be verified.');
       signedIn = true;
       nick = session.username;
-      recordActivity(nick, 'Pi account connected');
       if (window.__tenWinnersIncompletePayment) {
         const pending = window.__tenWinnersIncompletePayment;
         window.__tenWinnersIncompletePayment = null;
