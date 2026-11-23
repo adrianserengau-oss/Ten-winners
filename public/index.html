@@ -10,7 +10,7 @@
 <link rel="icon" href="/gift.png" type="image/png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap">
-<link rel="stylesheet" href="/app.css?v=account-drawer">
+<link rel="stylesheet" href="/app.css?v=winner-avatar">
 </head>
 <body>
 <main>
@@ -126,6 +126,15 @@
     </div>
   </div>
   <div id="accountSignedOut" hidden><a class="history-link" id="accountConnect" href="#participation">Go to Pi sign-in</a></div>
+  <section class="avatar-controls" id="avatarControls" aria-label="Profile picture" hidden>
+    <p class="small" id="avatarHelp">Your picture is public on your winner tile if you win.</p>
+    <div>
+      <button type="button" class="mark-read" id="chooseAvatar" aria-describedby="avatarHelp">Choose picture</button>
+      <button type="button" class="mark-read" id="removeAvatar" hidden>Remove picture</button>
+      <input id="avatarFile" type="file" accept="image/*" hidden>
+    </div>
+    <p class="small" id="avatarStatus" role="status"></p>
+  </section>
   <div id="accountSections" hidden>
     <section class="account-history">
       <h3>Previous sign-ins</h3><p class="small" id="signInSummary"></p><ul id="accountActivity" class="activity-list"></ul>
@@ -142,6 +151,6 @@
     </section>
   </div>
 </dialog>
-<script src="/app.js?v=account-drawer"></script>
+<script src="/app.js?v=winner-avatar"></script>
 </body>
 </html>

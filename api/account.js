@@ -1,3 +1,4 @@
+const { validateAvatar } = require('./_lib/avatars');
 const { recordActivity } = require('./_lib/activity');
 const { authUser, guard, bad, r, nextDraw, rid, dueAt } = require('./_lib/core');
 
@@ -19,12 +20,13 @@ const event = (id, type, at, fields = {}) => ({ id, type, at, ...fields });
 
 async function account(user) {
   const round = rid(nextDraw());
-  const [rounds, records, transactions, entries, read] = await Promise.all([
+  const [rounds, records, transactions, entries, read, avatar] = await Promise.all([
     r('LRANGE', 'history', 0, PAGE - 1),
     r('EVAL', LEGACY_PAYOUTS, 0, user.uid),
     r('LRANGE', 'transactions:' + user.uid, 0, PAGE - 1),
     r('LRANGE', 'activity:' + user.uid, 0, PAGE - 1),
     r('SMEMBERS', 'activity:read:' + user.uid),
+    r('HGET', 'avatars', user.uid),
   ]);
   const ids = [...new Set([round, ...rounds])];
   const [counts, rawDraws] = await Promise.all([
@@ -59,7 +61,7 @@ async function account(user) {
   const marked = new Set(read);
   notifications.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
   payouts.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
-  return { username: user.username, signIns, tickets, transactions: payments, payouts,
+  return { username: user.username, avatar, signIns, tickets, transactions: payments, payouts,
     notifications: notifications.slice(0, PAGE).map((item) => ({ ...item, read: marked.has(item.id) })) };
 }
 
@@ -70,7 +72,12 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   if (req.method === 'GET') return res.json(await account(user));
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) throw bad('Expected JSON.');
-  const { action, ids } = req.body || {};
+  const { action, ids, avatar } = req.body || {};
+  if (action === 'set_avatar') {
+    if (avatar === null) await r('HDEL', 'avatars', user.uid);
+    else await r('HSET', 'avatars', user.uid, validateAvatar(avatar));
+    return res.json({ ok: true });
+  }
   if (action === 'report_wallet_error') {
     await recordActivity(user.uid, 'wallet_error_reported', true);
     return res.json({ ok: true });

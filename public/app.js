@@ -70,7 +70,11 @@
     $('accountSections').hidden = !data;
     $('accountUsername').hidden = !signedIn;
     $('accountUsername').textContent = signedIn ? '@' + nick : '';
-    $('accountAvatar').textContent = signedIn ? Array.from(nick).slice(0, 2).join('').toUpperCase() : 'π';
+    const avatar = profileImage(data?.avatar);
+    if (avatar) $('accountAvatar').replaceChildren(avatar);
+    else $('accountAvatar').textContent = signedIn ? Array.from(nick).slice(0, 2).join('').toUpperCase() : 'π';
+    $('avatarControls').hidden = !signedIn;
+    $('removeAvatar').hidden = !avatar;
     $('accountStatus').textContent = !sessionChecked ? 'Checking your Pi session…'
       : !signedIn ? 'Connect with Pi to see your account.'
       : 'Verified Pi account' + (accountError ? ' · Could not refresh history' : data ? '' : ' · Loading history…');
@@ -163,11 +167,75 @@
     });
   }
 
+  function profileImage(uri) {
+    if (typeof uri !== 'string' || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(uri)) return null;
+    const image = document.createElement('img');
+    image.src = uri;
+    image.alt = '';
+    image.className = 'profile-image';
+    return image;
+  }
+
   function renderSlots(winners, count) {
-    $('slots').innerHTML = Array.from({ length: count }, (_, index) => {
+    $('slots').replaceChildren(...Array.from({ length: count }, (_, index) => {
       const winner = winners[index];
-      return '<li class="slot"><b>' + (index + 1) + '</b><i class="person-icon" aria-hidden="true"></i><span>' + (winner ? esc(winner.nick) : '—') + '</span></li>';
-    }).join('');
+      const slot = document.createElement('li');
+      const number = document.createElement('b');
+      const name = document.createElement('span');
+      const image = profileImage(winner?.avatar) || document.createElement('i');
+      if (image.tagName === 'I') {
+        image.className = 'person-icon';
+        image.setAttribute('aria-hidden', 'true');
+      }
+      slot.className = 'slot';
+      number.textContent = index + 1;
+      name.textContent = winner?.nick || '—';
+      slot.append(number, image, name);
+      return slot;
+    }));
+  }
+
+  async function prepareAvatar(file) {
+    if (file.size > 12 * 1024 * 1024) throw new Error('Choose a picture under 12 MB.');
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error('This picture could not be opened.'));
+        image.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 96;
+      const ctx = canvas.getContext('2d');
+      const edge = Math.min(image.naturalWidth, image.naturalHeight);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 96, 96);
+      ctx.drawImage(image, (image.naturalWidth - edge) / 2, (image.naturalHeight - edge) / 2, edge, edge, 0, 0, 96, 96);
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function changeAvatar(file) {
+    const version = sessionVersion;
+    const status = $('avatarStatus');
+    const choose = $('chooseAvatar');
+    const remove = $('removeAvatar');
+    choose.disabled = remove.disabled = true;
+    status.textContent = file ? 'Saving picture…' : 'Removing picture…';
+    try {
+      const avatar = file ? await prepareAvatar(file) : null;
+      if (!signedIn || version !== sessionVersion) throw new Error('Your session changed. Please try again.');
+      await api('account', { action: 'set_avatar', avatar });
+      status.textContent = file ? 'Profile picture saved.' : 'Profile picture removed.';
+      await Promise.allSettled([refreshAccount(), load()]);
+    } catch (error) {
+      status.textContent = error.message || 'Could not update the profile picture.';
+    } finally {
+      choose.disabled = remove.disabled = false;
+    }
   }
 
   async function load() {
@@ -250,6 +318,14 @@
     accountDrawer.showModal();
     void refreshAccount();
   };
+  $('chooseAvatar').onclick = () => $('avatarFile').click();
+  $('avatarFile').onchange = () => {
+    const picker = $('avatarFile');
+    const file = picker.files[0];
+    picker.value = '';
+    if (file) void changeAvatar(file);
+  };
+  $('removeAvatar').onclick = () => { void changeAvatar(null); };
   $('closeAccount').onclick = () => accountDrawer.close();
   $('accountConnect').onclick = () => accountDrawer.close();
   accountDrawer.addEventListener('click', (event) => {

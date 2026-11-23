@@ -284,3 +284,8 @@ h2 { font-size: clamp(1rem, 4vw, 2.18rem); letter-spacing: -.035em; }
 .account-history h3 { color: #562282; font-size: 1rem; }
 .account-history .activity-list { max-height: none; overflow: visible; }
 .account-history summary { cursor: pointer; margin-top: 8px; font-weight: 700; }
+.avatar-controls { margin: 0 0 16px; }
+.avatar-controls > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-image { display: block; object-fit: cover; border-radius: 50%; }
+.account-avatar .profile-image { width: 100%; height: 100%; }
+.slot .profile-image { width: clamp(19px, 4.3vw, 42px); aspect-ratio: 1; }
