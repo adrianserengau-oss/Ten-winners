@@ -106,7 +106,7 @@ async function issue(p) {
       !p.status?.developer_completed) throw bad('Invalid or incomplete Pi payment.');
   if (typeof id !== 'string' || !isWeeklyRound(id)) throw bad('Invalid draw round.');
   // The published cutoff is authoritative even for already-finished payments.
-  return r('EVAL', ISSUE, 0, p.identifier, id, uid, qty, dueAt(id), Date.now(), C.MAX);
+  return r('EVAL', ISSUE, 0, p.identifier, id, uid, qty, dueAt(id), Date.now(), C.MAX, new Date().toISOString(), C.PRICE);
 }
 
 async function draw(id) {
@@ -118,12 +118,12 @@ async function draw(id) {
   const t = (await r('LRANGE', 'tickets:' + id, 0, -1))
     .map((x) => JSON.parse(x)).sort((a, b) => a.n - b.n);
   const seed = await seedFor(id);
-  const res = { id, tickets: t.length, seed, commit: sha(seed) };
+  const res = { id, drawnAt: new Date().toISOString(), tickets: t.length, seed, commit: sha(seed) };
   const payouts = [];
   if (t.length < C.WINNERS) {
     res.cancelled = true;
     for (const x of t) payouts.push({ id: id + ':' + x.n, record: {
-      type: 'refund', round: id, uid: x.uid, amount: C.PRICE, status: 'pending'
+      type: 'refund', round: id, uid: x.uid, amount: C.PRICE, status: 'pending', createdAt: res.drawnAt
     } });
   } else {
     const pool = t.length * C.PRICE;
@@ -132,7 +132,7 @@ async function draw(id) {
     for (const w of pick(seed, t, C.WINNERS)) {
       res.winners.push({ n: w.n, nick: await nickOf(w.uid) });
       payouts.push({ id: id + ':' + w.n, record: {
-        type: 'prize', round: id, uid: w.uid, amount: share, status: 'pending'
+        type: 'prize', round: id, uid: w.uid, amount: share, status: 'pending', createdAt: res.drawnAt
       } });
     }
   }

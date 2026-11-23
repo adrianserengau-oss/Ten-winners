@@ -1,3 +1,4 @@
+const { recordActivity } = require('./_lib/activity');
 const { C, r, pi, nextDraw, rid, issue, authUser, guard, bad } = require('./_lib/core');
 
 // U2A payment flow (Pi docs): approve -> user signs in Pi Wallet -> complete.
@@ -45,13 +46,20 @@ module.exports = guard(async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Pi sign-in is required.' });
   const { action, paymentId, txid } = req.body || {};
   if (req.method !== 'POST' || !/^[\w-]{6,100}$/.test(paymentId || '')) throw bad('Bad request.');
-  if (action === 'approve') await approve(paymentId, user.uid);
-  else if (action === 'complete') { if (typeof txid !== 'string' || !/^[a-zA-Z0-9_-]{6,150}$/.test(txid)) throw bad('Invalid transaction id.'); res.setHeader('X-Result', await complete(paymentId, txid, user.uid)); }
-  else if (action === 'incomplete') { // payment left unfinished from an earlier session
-    const p = await pi('/payments/' + paymentId, { key: 1 });
-    if (p.user_uid !== user.uid) throw bad('This payment does not belong to the signed-in user.');
-    if (p.transaction && p.transaction.txid) await complete(paymentId, p.transaction.txid, user.uid);
-    else if (!p.status.developer_completed && !p.status.cancelled) await pi('/payments/' + paymentId + '/cancel', { method: 'POST', key: 1 });
-  } else throw bad('Unknown action.');
+  try {
+    if (action === 'approve') await approve(paymentId, user.uid);
+    else if (action === 'complete') { if (typeof txid !== 'string' || !/^[a-zA-Z0-9_-]{6,150}$/.test(txid)) throw bad('Invalid transaction id.'); res.setHeader('X-Result', await complete(paymentId, txid, user.uid)); }
+    else if (action === 'incomplete') { // payment left unfinished from an earlier session
+      const p = await pi('/payments/' + paymentId, { key: 1 });
+      if (p.user_uid !== user.uid) throw bad('This payment does not belong to the signed-in user.');
+      if (p.transaction && p.transaction.txid) await complete(paymentId, p.transaction.txid, user.uid);
+      else if (!p.status.developer_completed && !p.status.cancelled) await pi('/payments/' + paymentId + '/cancel', { method: 'POST', key: 1 });
+    } else throw bad('Unknown action.');
+  } catch (error) {
+    if (['approve', 'complete', 'incomplete'].includes(action)) {
+      await recordActivity(user.uid, 'payment_failure', true).catch(() => {});
+    }
+    throw error;
+  }
   res.json({ ok: true });
 });

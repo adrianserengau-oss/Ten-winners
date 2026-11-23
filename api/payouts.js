@@ -1,5 +1,17 @@
 const { r, guard, bad } = require('./_lib/core');
 
+const MARK_PAID = `
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return 0 end
+local payout = cjson.decode(raw)
+if payout.status ~= 'paid' then
+  payout.status = 'paid'
+  payout.paidAt = ARGV[2]
+  redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(payout))
+end
+return 1
+`;
+
 // Admin only. GET lists payouts (prizes and refunds). POST {key} marks one as paid.
 // Winners are paid from the app wallet; automate this with a Pi backend SDK (A2U) once approved.
 module.exports = guard(async (req, res) => {

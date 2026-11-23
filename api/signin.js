@@ -1,3 +1,4 @@
+const { recordActivity } = require('./_lib/activity');
 const { r, pi, authUser, guard, createSessionCookie } = require('./_lib/core');
 
 // Only the Pi Platform API can assert an account's identity.
@@ -30,6 +31,7 @@ module.exports = guard(async (req, res) => {
   // The existing draw history logic uses this map. Only verified Pi identities can update it.
   await r('HSET', 'nicks', user.uid, user.username);
   res.setHeader('Cache-Control', 'no-store');
+  await recordActivity(user.uid, 'sign_in');
   res.setHeader('Set-Cookie', createSessionCookie(user));
   return res.json({ username: user.username });
 });

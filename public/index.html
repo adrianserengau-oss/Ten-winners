@@ -17,7 +17,35 @@
 <header class="brand">
   <img src="/gift.png" alt="" width="82" height="90">
   <div><h1>Ten Winners</h1><p>Weekly Pi Lottery</p></div>
-  <a class="profile-link" href="#participation" aria-label="Your participation"><span class="person-icon" aria-hidden="true"></span></a>
+  <div class="header-actions">
+    <details class="notifications" id="notifications">
+      <summary class="profile-link" aria-label="Notifications">
+        <span class="bell-icon" aria-hidden="true"></span>
+        <span class="notification-dot" id="notificationDot" hidden></span>
+      </summary>
+      <section class="notification-panel" aria-labelledby="notificationsTitle">
+        <h2 id="notificationsTitle">Notifications</h2>
+        <p class="small" id="activityStatus">Connect with Pi to see your notifications.</p>
+        <button class="mark-read" id="markRead" hidden>Mark all as read</button>
+        <ol class="activity-list" id="activityList"></ol>
+      </section>
+    </details>
+    <details class="notifications" id="accountMenu">
+      <summary class="profile-link" aria-label="Pi account"><span class="person-icon" aria-hidden="true"></span></summary>
+      <section class="notification-panel account-panel" aria-labelledby="accountTitle">
+        <h2 id="accountTitle">Pi Account</h2>
+        <p class="small" id="accountStatus">Connect with Pi to see your account.</p>
+        <a class="history-link" id="accountConnect" href="#participation">Go to Pi sign-in</a>
+        <div id="accountSections" hidden>
+          <h3>Tickets purchased by draw</h3><ul id="accountTickets" class="activity-list"></ul>
+          <h3>Payment transactions</h3><ul id="accountTransactions" class="activity-list"></ul>
+          <h3>Previous winnings</h3><ul id="accountWinnings" class="activity-list"></ul>
+          <h3>Refunds</h3><ul id="accountRefunds" class="activity-list"></ul>
+          <h3>Account activity</h3><ul id="accountActivity" class="activity-list"></ul>
+        </div>
+      </section>
+    </details>
+  </div>
 </header>
 <div class="banner" id="bn" hidden></div>
 
@@ -63,12 +91,12 @@
   </dl>
   <h3 class="ticket-heading">Buy More Tickets</h3>
   <div class="btns">
-    <button data-buy="1" disabled><strong>Buy 1</strong><span>1 π</span></button>
-    <button data-buy="5" disabled><strong>Buy 5</strong><span>5 π</span></button>
-    <button data-buy="10" disabled><strong>Buy 10</strong><span>10 π</span></button>
-    <button data-buy="25" disabled><strong>Buy 25</strong><span>25 π</span></button>
-    <button data-buy="50" disabled><strong>Buy 50</strong><span>50 π</span></button>
-    <button data-buy="100" disabled><strong>Buy 100</strong><span>100 π</span></button>
+    <button data-buy="1" disabled><strong>Buy 1</strong><span>1 Ticket · <b class="ticket-price">1 π</b></span></button>
+    <button data-buy="5" disabled><strong>Buy 5</strong><span>5 Tickets · <b class="ticket-price">5 π</b></span></button>
+    <button data-buy="10" disabled><strong>Buy 10</strong><span>10 Tickets · <b class="ticket-price">10 π</b></span></button>
+    <button data-buy="25" disabled><strong>Buy 25</strong><span>25 Tickets · <b class="ticket-price">25 π</b></span></button>
+    <button data-buy="50" disabled><strong>Buy 50</strong><span>50 Tickets · <b class="ticket-price">50 π</b></span></button>
+    <button data-buy="100" disabled><strong>Buy 100</strong><span>100 Tickets · <b class="ticket-price">100 π</b></span></button>
   </div>
   <p class="small" id="ticketLimit"></p>
   <p class="small" id="paymentNotice" hidden>Ticket purchases are paused while secure payment testing is completed.</p>

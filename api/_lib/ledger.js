@@ -8,11 +8,17 @@ local prior = redis.call('GET', pay)
 if prior then return prior end
 local id, uid, qty = ARGV[2], ARGV[3], tonumber(ARGV[4])
 local cutoff, now, maxTickets = tonumber(ARGV[5]), tonumber(ARGV[6]), tonumber(ARGV[7])
+local function record(status)
+  redis.call('LPUSH', 'transactions:' .. uid, cjson.encode({
+    id=ARGV[1], round=id, quantity=qty, amount=qty * tonumber(ARGV[9]), at=ARGV[8], status=status
+  }))
+end
 if now >= cutoff or redis.call('EXISTS', 'drawn:' .. id, 'closing:' .. id) > 0
    or tonumber(redis.call('HGET', 'cnt:' .. id, uid) or '0') + qty > maxTickets then
   redis.call('HSET', 'payouts', ARGV[1], cjson.encode({
-    type='refund', round=id, uid=uid, amount=qty, status='pending', payment=ARGV[1]
+    type='refund', round=id, uid=uid, amount=qty * tonumber(ARGV[9]), status='pending', createdAt=ARGV[8], payment=ARGV[1]
   }))
+  record('refund_pending')
   redis.call('SET', pay, 'refund')
   return 'refund'
 end
@@ -22,6 +28,7 @@ for i=1,qty do
 end
 redis.call('HINCRBY', 'cnt:' .. id, uid, qty)
 redis.call('SADD', 'rounds:open', id)
+record('credited')
 redis.call('SET', pay, 'ok')
 return 'ok'
 `;
