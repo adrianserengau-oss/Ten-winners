@@ -43,12 +43,16 @@
     bn.textContent = 'Test mode: payments use the Pi test environment and have no real value.';
     const last = S.history[0];
     const w = last && !last.cancelled ? last.winners : [];
-    $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Tickets are refunded.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their in-app nicknames.';
+    $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Tickets are refunded.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their verified Pi usernames.';
     $('slots').innerHTML = Array.from({ length: S.winners }, (_, i) => w[i] ? '<div class="slot won"><b>#' + w[i].n + '</b>' + esc(w[i].nick) + '</div>' : '<div class="slot"><b>–</b>open</div>').join('');
     $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, pool ' + fmt(h.pool) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
     $('connectBox').hidden = signedIn;
     $('buyBox').hidden = !signedIn;
-    document.querySelectorAll('[data-buy]').forEach((b) => { b.disabled = !nick || S.mine + +b.dataset.buy > S.max; });
+    $('piUsername').textContent = signedIn ? nick : '';
+    $('paymentNotice').hidden = !!S.purchasesEnabled;
+    document.querySelectorAll('[data-buy]').forEach((b) => {
+      b.disabled = !signedIn || !S.purchasesEnabled || S.mine + +b.dataset.buy > S.max;
+    });
   }
 
   async function load() { S = await api('state'); render(); }
@@ -56,38 +60,34 @@
   async function connect() {
     if (!inPi()) return say('Open this app in the Pi Browser to connect and buy tickets.', 'err');
     try {
+      if (!piReady) throw new Error('Pi SDK is unavailable. Please refresh in Pi Browser.');
       await piReady;
-      if (!piReady) throw new Error('Pi SDK has not been initialized. Please refresh the app in Pi Browser.');
-      await piReady;
-      const a = await window.Pi.authenticate(['username'], (p) => {
+      const a = await window.Pi.authenticate(['username', 'payments'], (p) => {
         // Incomplete payments are resolved after sign-in has established the app session.
         window.__tenWinnersIncompletePayment = p;
       });
       if (!a || typeof a.accessToken !== 'string' || !a.accessToken) throw new Error('Pi did not return an access token. Please try signing in again.');
-      // The server exchanges this access token with Pi App Studio and trusts only its returned identity.
+      // The server verifies the token directly with Pi Platform /v2/me.
       const session = await api('signin', { accessToken: a.accessToken });
+      if (!session.username) throw new Error('The Pi account username could not be verified.');
       signedIn = true;
-      nick = session.nickname || '';
-      $('nick').value = nick;
+      nick = session.username;
       if (window.__tenWinnersIncompletePayment) {
         const pending = window.__tenWinnersIncompletePayment;
         window.__tenWinnersIncompletePayment = null;
         await api('pay', { action: 'incomplete', paymentId: pending.identifier }).catch(() => {});
       }
       await load();
-      say(nick ? 'Connected.' : 'Connected. Choose a nickname to start buying tickets.', 'ok');
+      say('Connected to Pi as @' + nick + '.', 'ok');
     } catch (e) { signedIn = false; say(e.message || 'Could not connect.', 'err'); }
   }
 
-  async function saveNick() {
-    try { nick = (await api('signin', { nickname: $('nick').value })).nickname; say('Nickname saved.', 'ok'); render(); }
-    catch (e) { say(e.message, 'err'); }
-  }
-
   function buy(q) {
-    if (!nick) return say('Save a nickname first.', 'err');
+    if (!signedIn || !nick) return say('Connect your verified Pi account first.', 'err');
+    if (!S.purchasesEnabled) return say('Ticket purchases are paused until payment safety testing is finished.', 'err');
     say('Opening Pi Wallet…');
-    window.Pi.createPayment(
+    try {
+      Promise.resolve(window.Pi.createPayment(
       { amount: q * S.price, memo: 'Ten Winners: ' + q + ' ticket' + (q > 1 ? 's' : '') + ' for the ' + S.round + ' draw', metadata: { qty: q, round: S.round } },
       {
         onReadyForServerApproval: (id) => api('pay', { action: 'approve', paymentId: id }).catch((e) => say(e.message, 'err')),
@@ -95,11 +95,11 @@
         onCancel: () => say('Payment cancelled.'),
         onError: (e) => say((e && e.message) || 'Payment failed.', 'err'),
       }
-    );
+      )).catch((e) => say(e.message || 'Pi Wallet could not open.', 'err'));
+    } catch (e) { say(e.message || 'Pi Wallet could not open.', 'err'); }
   }
 
   $('connect').onclick = connect;
-  $('saveNick').onclick = saveNick;
   document.querySelectorAll('[data-buy]').forEach((b) => (b.onclick = () => buy(+b.dataset.buy)));
 
   // Initialize the Pi SDK exactly once, and wait for it before allowing authentication.

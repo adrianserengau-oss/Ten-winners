@@ -9,5 +9,5 @@ module.exports = guard(async (req, res) => {
   const ids = await r('LRANGE', 'history', 0, 11);
   const history = ids.length ? (await r('MGET', ...ids.map((i) => 'result:' + i))).map((x) => JSON.parse(x)) : [];
   res.json({ round: id, nextDraw: nd.toISOString(), drawHourUtc: C.DRAW_HOUR_UTC, tickets, mine, commit,
-    price: C.PRICE, max: C.MAX, winners: C.WINNERS, payout: C.PAYOUT, cadence: 'weekly', drawDayUtc: 0, sandbox: process.env.PI_SANDBOX !== 'false', history });
+    price: C.PRICE, max: C.MAX, winners: C.WINNERS, payout: C.PAYOUT, cadence: 'weekly', drawDayUtc: 0, sandbox: process.env.PI_SANDBOX !== 'false', purchasesEnabled: false, history });
 });

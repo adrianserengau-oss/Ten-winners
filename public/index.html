@@ -47,7 +47,7 @@ code{font-size:12px;word-break:break-all}
 <main>
 <div class="banner" id="bn" hidden></div>
 <h1>Ten Winners</h1>
-<p class="sub">A new draw is held every Sunday at 8:00 PM GMT (20:00 UTC). 10 tickets are drawn at random, and the winners are announced here by their in-app nicknames.</p>
+<p class="sub">A new draw is held every Sunday at 8:00 PM GMT (20:00 UTC). 10 tickets are drawn at random, and the winners are announced here by their verified Pi usernames.</p>
 
 <section class="pool" aria-live="polite">
   <small>Eligible prize pool for the next draw (90% of ticket contributions)</small>
@@ -57,7 +57,7 @@ code{font-size:12px;word-break:break-all}
 </section>
 
 <h2 style="margin:20px 0 0">Winners of the last draw</h2>
-<p class="small" style="margin:0" id="lastinfo">Winners are shown by their in-app nicknames.</p>
+<p class="small" style="margin:0" id="lastinfo">Winners are shown by their verified Pi usernames.</p>
 <div class="slots" id="slots"></div>
 
 <section class="card">
@@ -67,8 +67,8 @@ code{font-size:12px;word-break:break-all}
     <button class="primary" id="connect">Connect with Pi</button>
   </div>
   <div id="buyBox" hidden>
-    <div class="row"><label for="nick"><b>Your nickname</b></label><input id="nick" maxlength="20" autocomplete="off" placeholder="3–20 letters or numbers"></div>
-    <div class="btns" style="margin:0 0 12px"><button id="saveNick">Save nickname</button></div>
+    <div class="row"><b>Connected Pi username</b><strong id="piUsername"></strong></div>
+    <p class="small" id="paymentNotice">Ticket purchases are temporarily unavailable while secure payment testing is completed.</p>
     <div class="row muted"><span>Your tickets this round</span><span id="mine">0 / 10</span></div>
     <div class="row"><b>Your chance this round</b><b id="odds">—</b></div>
     <div class="btns">
