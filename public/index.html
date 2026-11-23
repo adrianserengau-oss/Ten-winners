@@ -17,18 +17,19 @@
 <header class="brand">
   <img src="/gift.png" alt="" width="82" height="90">
   <div><h1>Ten Winners</h1><p>Weekly Pi Lottery</p></div>
+  <a class="profile-link" href="#participation" aria-label="Your participation"><span class="person-icon" aria-hidden="true"></span></a>
 </header>
 <div class="banner" id="bn" hidden></div>
 
 <section class="hero" aria-label="Weekly draw">
   <img class="hero-gift" src="/draw-gift.png" alt="">
   <div class="draw">
-    <p>Next Weekly Draw</p>
+    <p class="draw-label"><span class="calendar-icon" aria-hidden="true"></span>Next Weekly Draw</p>
     <h2>Sunday 20:00 UTC</h2>
     <p class="date" id="nd">Loading next draw…</p>
     <div class="prize">
       <span>Eligible Prize Pool</span>
-      <strong id="pool">—</strong>
+      <div class="prize-value"><img src="/gold-coin.png" alt=""><strong id="pool">—</strong></div>
     </div>
   </div>
   <div class="hero-caption">
@@ -40,7 +41,7 @@
 
 <section class="card">
   <div class="row">
-    <h2><span aria-hidden="true">🏆</span> Previous Winners</h2>
+    <h2><img class="heading-icon" src="/trophy.png" alt=""> Previous Winners</h2>
     <a class="history-link" href="#history">View History ›</a>
   </div>
   <ol class="slots" id="slots" aria-label="Previous draw winner slots"></ol>
@@ -49,7 +50,7 @@
 
 <section class="card" id="participation">
   <div class="row">
-    <h2><span aria-hidden="true">🎟️</span> Your Participation</h2>
+    <h2><img class="heading-icon" src="/ticket.png" alt=""> Your Participation</h2>
     <strong class="connected" id="connected" hidden>✓ Pi Connected</strong>
   </div>
   <div id="connectBox">
@@ -60,14 +61,14 @@
     <div><dt>Your tickets</dt><dd id="mine">—</dd></div>
     <div><dt>Your chance</dt><dd id="odds">—</dd></div>
   </dl>
-  <h3 class="ticket-heading">Buy Tickets</h3>
+  <h3 class="ticket-heading">Buy More Tickets</h3>
   <div class="btns">
-    <button data-buy="1" disabled><strong>1 Ticket</strong><span>1 π</span></button>
-    <button data-buy="5" disabled><strong>5 Tickets</strong><span>5 π</span></button>
-    <button data-buy="10" disabled><strong>10 Tickets</strong><span>10 π</span></button>
-    <button data-buy="25" disabled><strong>25 Tickets</strong><span>25 π</span></button>
-    <button data-buy="50" disabled><strong>50 Tickets</strong><span>50 π</span></button>
-    <button data-buy="100" disabled><strong>100 Tickets</strong><span>100 π</span></button>
+    <button data-buy="1" disabled><strong>Buy 1</strong><span>1 π</span></button>
+    <button data-buy="5" disabled><strong>Buy 5</strong><span>5 π</span></button>
+    <button data-buy="10" disabled><strong>Buy 10</strong><span>10 π</span></button>
+    <button data-buy="25" disabled><strong>Buy 25</strong><span>25 π</span></button>
+    <button data-buy="50" disabled><strong>Buy 50</strong><span>50 π</span></button>
+    <button data-buy="100" disabled><strong>Buy 100</strong><span>100 π</span></button>
   </div>
   <p class="small" id="ticketLimit"></p>
   <p class="small" id="paymentNotice" hidden>Ticket purchases are paused while secure payment testing is completed.</p>
@@ -75,7 +76,7 @@
 </section>
 
 <section class="card split">
-  <span class="coin" aria-hidden="true">π</span>
+  <img class="split-coins" src="/split-coins.png" alt="">
   <div>
     <h2>The 90/10 Split</h2>
     <p>90% of ticket proceeds form the eligible prize pool, shared equally by 10 winners. The other 10% supports running and improving Ten Winners.</p>

@@ -60,7 +60,7 @@
   function renderSlots(winners, count) {
     $('slots').innerHTML = Array.from({ length: count }, (_, index) => {
       const winner = winners[index];
-      return '<li class="slot"><b>' + (index + 1) + '</b><span>' + (winner ? esc(winner.nick) : '—') + '</span></li>';
+      return '<li class="slot"><b>' + (index + 1) + '</b><i class="person-icon" aria-hidden="true"></i><span>' + (winner ? esc(winner.nick) : '—') + '</span></li>';
     }).join('');
   }
 
