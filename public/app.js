@@ -29,25 +29,13 @@
   let accountData;
   let accountError = false;
 
-  const activityLabels = {
-    sign_in: 'Pi account connected',
-    payment_failure: 'Server reported a payment error',
-    wallet_error_reported: 'This app reported a wallet error',
-    payment_confirmed: 'Pi payment confirmed',
-    purchase: 'Tickets credited',
-    draw_announced: 'Draw results announced',
-    draw_cancelled: 'Draw cancelled',
-    winning: 'Prize won · payout pending',
-    refund_pending: 'Refund queued',
-    prize_paid: 'Prize marked paid',
-    refund_paid: 'Refund marked paid',
-  };
-
   function activityLabel(entry) {
-    return [activityLabels[entry.type], entry.round && 'Draw ' + entry.round,
-      entry.quantity && entry.quantity + (entry.quantity === 1 ? ' ticket' : ' tickets'),
-      entry.amount != null && fmt(entry.amount) + ' π'].filter(Boolean).join(' · ');
+    return entry.type === 'winning'
+      ? 'You won ' + fmt(entry.amount) + ' π · Draw ' + entry.round
+      : 'Draw held · ' + entry.round;
   }
+
+  const count = (n, unit) => n + ' ' + unit + (n === 1 ? '' : 's');
 
   function list(id, rows, empty) {
     $(id).replaceChildren(...(rows.length ? rows : [{ title: empty }]).map((row) => {
@@ -80,31 +68,43 @@
     $('markRead').hidden = unread === 0;
     $('accountSignedOut').hidden = !sessionChecked || signedIn;
     $('accountSections').hidden = !data;
+    $('accountUsername').hidden = !signedIn;
+    $('accountUsername').textContent = signedIn ? '@' + nick : '';
+    $('accountAvatar').textContent = signedIn ? Array.from(nick).slice(0, 2).join('').toUpperCase() : 'π';
     $('accountStatus').textContent = !sessionChecked ? 'Checking your Pi session…'
       : !signedIn ? 'Connect with Pi to see your account.'
-      : 'Verified Pi account · @' + nick + (accountError ? ' · Could not refresh history' : data ? '' : ' · Loading history…');
+      : 'Verified Pi account' + (accountError ? ' · Could not refresh history' : data ? '' : ' · Loading history…');
     $('activityStatus').textContent = !signedIn ? 'Connect with Pi to see your notifications.'
       : accountError ? 'Could not refresh account activity. Try reopening this menu.'
-      : !data ? 'Loading your notifications…' : unread + ' unread';
+      : !data ? 'Loading your notifications…' : notifications.length ? unread + ' unread' : 'Draw results and your wins will appear here.';
     if (!data) {
       for (const id of ['activityList', 'accountTickets', 'accountTransactions', 'accountWinnings', 'accountRefunds', 'accountActivity']) $(id).replaceChildren();
       return;
     }
     list('activityList', notifications.map((item) => ({ title: activityLabel(item), at: item.at, unread: !item.read })), 'No notifications yet.');
-    list('accountTickets', data.tickets.map((item) => ({ title: item.round + ' · ' + item.count + (item.count === 1 ? ' ticket' : ' tickets') })), 'No ticket records.');
+    const tickets = data.tickets.filter((item) => item.count > 0);
+    const signIns = data.signIns || [];
+    $('signInSummary').textContent = count(signIns.length, 'recorded sign-in');
+    $('ticketSummary').textContent = count(tickets.reduce((sum, item) => sum + item.count, 0), 'ticket') + ' across ' + count(tickets.length, 'recent draw');
+    list('accountActivity', signIns.map((entry) => ({ title: 'Signed in with Pi', at: entry.at })), 'No sign-ins recorded.');
+    list('accountTickets', tickets.map((item) => ({ title: count(item.count, 'ticket') + ' · Draw ' + item.round })), 'No tickets purchased in recent draws.');
     list('accountTransactions', data.transactions.map((item) => ({
       title: item.round + ' · ' + item.quantity + ' tickets · ' + fmt(item.amount) + ' π · ' + (item.status === 'credited' ? 'Credited' : 'Refund pending'),
       at: item.at,
     })), 'No itemized payment records available.');
-    for (const [id, type] of [['accountWinnings', 'prize'], ['accountRefunds', 'refund']]) {
-      list(id, data.payouts.filter((item) => item.type === type).map((item) => ({
-        title: item.round + ' · ' + fmt(item.amount) + ' π · ' + (item.status === 'paid' ? 'Marked paid' : 'Pending'),
+    for (const [id, summary, type, unit] of [
+      ['accountWinnings', 'winningsSummary', 'prize', 'prize'],
+      ['accountRefunds', 'refundSummary', 'refund', 'refund'],
+    ]) {
+      const records = data.payouts.filter((item) => item.type === type);
+      const pending = records.filter((item) => item.status !== 'paid').length;
+      const total = records.reduce((amount, item) => amount + item.amount, 0);
+      $(summary).textContent = count(records.length, unit) + ' · ' + fmt(total) + ' π total · ' + pending + ' pending';
+      list(id, records.map((item) => ({
+        title: 'Draw ' + item.round + ' · ' + fmt(item.amount) + ' π · ' + (item.status === 'paid' ? 'Marked paid' : 'Pending'),
         at: item.paidAt || item.at,
       })), type === 'prize' ? 'No winnings recorded.' : 'No refunds recorded.');
     }
-    list('accountActivity', notifications.filter((item) => !item.type.startsWith('draw_')).map((item) => ({
-      title: activityLabel(item), at: item.at,
-    })), 'No account activity yet.');
   }
 
   async function refreshAccount() {
@@ -234,18 +234,30 @@
     } catch (e) { say(e.message || 'Pi Wallet could not open.', 'err'); }
   }
 
-  for (const id of ['accountMenu', 'notifications']) {
-    const menu = $(id);
-    menu.addEventListener('toggle', () => { if (menu.open) void refreshAccount(); });
-    document.addEventListener('click', (event) => {
-      if (!menu.contains(event.target) || event.target.closest('#accountConnect')) menu.open = false;
-    });
-    menu.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape') return;
-      menu.open = false;
-      menu.querySelector('summary').focus();
-    });
-  }
+  const notificationsMenu = $('notifications');
+  const accountDrawer = $('accountMenu');
+  notificationsMenu.addEventListener('toggle', () => { if (notificationsMenu.open) void refreshAccount(); });
+  document.addEventListener('click', (event) => {
+    if (!notificationsMenu.contains(event.target)) notificationsMenu.open = false;
+  });
+  notificationsMenu.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    notificationsMenu.open = false;
+    notificationsMenu.querySelector('summary').focus();
+  });
+  $('openAccount').onclick = () => {
+    notificationsMenu.open = false;
+    accountDrawer.showModal();
+    void refreshAccount();
+  };
+  $('closeAccount').onclick = () => accountDrawer.close();
+  $('accountConnect').onclick = () => accountDrawer.close();
+  accountDrawer.addEventListener('click', (event) => {
+    if (event.target !== accountDrawer) return;
+    const bounds = accountDrawer.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right ||
+        event.clientY < bounds.top || event.clientY > bounds.bottom) accountDrawer.close();
+  });
 
   $('markRead').onclick = async () => {
     const ids = accountData?.notifications.filter((item) => !item.read).map((item) => item.id);

@@ -237,3 +237,50 @@ h2 { font-size: clamp(1rem, 4vw, 2.18rem); letter-spacing: -.035em; }
 .unread-label { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 6px; color: #573105; background: #ffe6a5; font-size: .72rem; }
 .btns button { min-height: clamp(44px, 9.3vw, 88px); }
 .btns .ticket-price { color: var(--ink); }
+.account-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(100%, 470px);
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  color: var(--ink);
+  border: 0;
+  border-left: 1px solid #e7d1f5;
+  background: linear-gradient(145deg, #f8eafb, #fffaff 52%, #f3e6fb);
+  box-shadow: -12px 0 36px #36104a42;
+  overscroll-behavior: contain;
+}
+.account-drawer[open] { animation: account-slide-in .22s ease-out; }
+.account-drawer::backdrop { background: #270c4166; }
+@keyframes account-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .account-drawer[open] { animation: none; } }
+.drawer-heading, .drawer-profile { display: flex; align-items: center; gap: 12px; }
+.drawer-heading { justify-content: space-between; }
+.drawer-close { width: 44px; border: 1px solid var(--line); background: #fff7ff; font-size: 1.5rem; }
+.drawer-profile {
+  margin-block: 14px;
+  padding: 14px;
+  border: 1px solid #fff;
+  border-radius: 20px;
+  background: linear-gradient(125deg, #ecd6fb, #fff4e7);
+}
+.account-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 56px;
+  height: 56px;
+  border: 2px solid #ffca54;
+  border-radius: 50%;
+  background: #61288b;
+  color: #ffe8a0;
+  font-weight: 800;
+  font-size: 1.2rem;
+}
+.profile-name { font-size: 1.18rem; font-weight: 800; overflow-wrap: anywhere; }
+.account-history { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fffaff; }
+.account-history h3 { color: #562282; font-size: 1rem; }
+.account-history .activity-list { max-height: none; overflow: visible; }
+.account-history summary { cursor: pointer; margin-top: 8px; font-weight: 700; }

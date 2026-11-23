@@ -33,16 +33,15 @@ async function account(user) {
   ]);
   const tickets = ids.map((id, i) => ({ round: id, count: counts[i] })).filter((item) => item.count || item.round === round);
   const payments = transactions.map((raw) => JSON.parse(raw));
-  const notifications = entries.map((raw) => JSON.parse(raw));
-  for (const item of payments) {
-    notifications.push(event('confirmed:' + item.id, 'payment_confirmed', item.at, { round: item.round, quantity: item.quantity, amount: item.amount }));
-    if (item.status === 'credited') notifications.push(event('purchase:' + item.id, 'purchase', item.at, { round: item.round, quantity: item.quantity }));
-  }
+  const signIns = entries.map((raw) => JSON.parse(raw))
+    .filter((item) => item.type === 'sign_in').map((item) => ({ at: item.at }));
+  const notifications = [];
   for (const raw of rawDraws) {
     if (!raw) continue;
     const draw = JSON.parse(raw);
+    if (draw.cancelled) continue;
     const cutoff = dueAt(draw.id);
-    notifications.push(event('draw:' + draw.id, draw.cancelled ? 'draw_cancelled' : 'draw_announced',
+    notifications.push(event('draw:' + draw.id, 'draw_announced',
       draw.drawnAt || (Number.isFinite(cutoff) ? new Date(cutoff).toISOString() : null), { round: draw.id }));
   }
   const payouts = [];
@@ -51,13 +50,16 @@ async function account(user) {
     const item = JSON.parse(records[i + 1]);
     const at = item.createdAt || null;
     payouts.push({ round: item.round, type: item.type, amount: item.amount, status: item.status, at, paidAt: item.paidAt });
-    notifications.push(event('queued:' + key, item.type === 'prize' ? 'winning' : 'refund_pending', at, { round: item.round, amount: item.amount }));
-    if (item.status === 'paid') notifications.push(event('paid:' + key, item.type === 'prize' ? 'prize_paid' : 'refund_paid', item.paidAt || null, { round: item.round, amount: item.amount }));
+    if (item.type === 'prize') {
+      const cutoff = dueAt(item.round);
+      const winDate = at || (Number.isFinite(cutoff) ? new Date(cutoff).toISOString() : null);
+      notifications.push(event('queued:' + key, 'winning', winDate, { round: item.round, amount: item.amount }));
+    }
   }
   const marked = new Set(read);
   notifications.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
   payouts.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
-  return { username: user.username, tickets, transactions: payments, payouts,
+  return { username: user.username, signIns, tickets, transactions: payments, payouts,
     notifications: notifications.slice(0, PAGE).map((item) => ({ ...item, read: marked.has(item.id) })) };
 }
 
