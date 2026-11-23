@@ -64,20 +64,27 @@ function signSession(payload) {
   return encoded + '.' + signature;
 }
 
-function createSessionCookie(user) {
-  const value = signSession({
+function createSessionToken(user, lifetime, scope) {
+  return signSession({
     uid: user.uid,
     username: user.username,
-    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+    exp: Math.floor(Date.now() / 1000) + lifetime,
+    scope,
   });
+}
+
+function createSessionCookie(user) {
+  const value = createSessionToken(user, 7 * 24 * 60 * 60);
   return 'tw_session=' + value + '; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Lax';
 }
 
 function readSession(req) {
   try {
     const raw = (req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith('tw_session='));
-    if (!raw) return null;
-    const value = raw.slice('tw_session='.length);
+    const header = req.headers.authorization;
+    const bearer = typeof header === 'string' && header.startsWith('Bearer ');
+    const value = bearer ? header.slice(7) : raw?.slice('tw_session='.length);
+    if (!value || value.length > 4096) return null;
     const parts = value.split('.');
     if (parts.length !== 2) return null;
     const secret = process.env.APP_SESSION_SECRET;
@@ -86,7 +93,9 @@ function readSession(req) {
     const actual = Buffer.from(parts[1], 'base64url');
     if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
     const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
-    if (!payload.uid || !payload.username || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (payload.scope !== (bearer ? 'browser' : undefined)) return null;
+    if (typeof payload.uid !== 'string' || !payload.uid || typeof payload.username !== 'string' ||
+        !payload.username.trim() || !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     return { uid: String(payload.uid), username: String(payload.username) };
   } catch { return null; }
 }
@@ -146,4 +155,4 @@ const guard = (fn) => async (req, res) => {
 };
 const bad = (msg) => Object.assign(new Error(msg), { pub: msg });
 
-module.exports = { C, r, pi, nextDraw, rid, dueAt, isWeeklyRound, sha, seedFor, pick, authUser, createSessionCookie, nickOf, issue, draw, guard, bad };
+module.exports = { C, r, pi, nextDraw, rid, dueAt, isWeeklyRound, sha, seedFor, pick, authUser, createSessionCookie, createSessionToken, nickOf, issue, draw, guard, bad };

@@ -23,7 +23,7 @@ h2 { font-size: clamp(1.2rem, 4.4vw, 1.75rem); line-height: 1.15; }
 .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .brand img { width: clamp(58px, 13vw, 82px); height: auto; mix-blend-mode: multiply; }
 .brand h1 { font-size: clamp(1.8rem, 7vw, 3.25rem); font-style: italic; font-weight: 800; line-height: 1; }
-.brand p { margin-top: 5px; letter-spacing: .2em; text-transform: uppercase; font-size: clamp(.65rem, 2.6vw, .9rem); }
+.brand > div > p { margin-top: 5px; letter-spacing: .2em; text-transform: uppercase; font-size: clamp(.65rem, 2.6vw, .9rem); }
 .banner { padding: 8px 12px; margin-bottom: 12px; border-radius: 12px; background: #fff1c9; }
 
 .hero, .card { margin-bottom: 14px; border-radius: 24px; }
@@ -126,7 +126,7 @@ body {
 main { max-width: 941px; padding-inline: clamp(10px, 2.55vw, 24px); }
 .brand { padding-inline: clamp(4px, 4vw, 48px) 4px; margin-block: 4px 18px; }
 .brand h1 { font-size: clamp(1.62rem, 5.8vw, 3.55rem); letter-spacing: -.045em; }
-.brand p { letter-spacing: .23em; }
+.brand > div > p { letter-spacing: .23em; }
 .brand img { width: clamp(45px, 11vw, 104px); mask-image: radial-gradient(ellipse, #000 65%, transparent 93%); }
 .profile-link {
   display: grid;
@@ -227,7 +227,7 @@ h2 { font-size: clamp(1rem, 4vw, 2.18rem); letter-spacing: -.035em; }
 @media (max-width: 380px) {
   .brand { padding-inline: 0; gap: 5px; }
   .brand h1 { font-size: clamp(1rem, 5.6vw, 1.4rem); }
-  .brand p { letter-spacing: .11em; font-size: .57rem; }
+  .brand > div > p { letter-spacing: .11em; font-size: .57rem; }
 }
 .account-panel { max-height: 68vh; overflow: auto; }
 .account-panel .history-link { display: inline-block; margin-top: 8px; }

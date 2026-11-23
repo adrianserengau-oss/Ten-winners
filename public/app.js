@@ -4,10 +4,16 @@
   const fmt = (n) => (+n).toFixed(4).replace(/\.?0+$/, '');
   let S, signedIn = false, nick = '', piReady = null;
 
-  async function api(path, body) {
+  // Some Pi Browser sessions do not return the session cookie. Keep the fallback in memory.
+  let sessionToken = '';
+  let sessionVersion = 0;
+
+  async function api(path, body, useFallback = true) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (useFallback && sessionToken && !(path === 'signin' && body)) headers.Authorization = 'Bearer ' + sessionToken;
     const x = await fetch('/api/' + path, {
       method: body ? 'POST' : 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'same-origin',
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -161,6 +167,7 @@
   }
 
   async function load() {
+    const version = sessionVersion;
     const [state, session] = await Promise.all([
       api('state'),
       api('signin').catch((error) => {
@@ -168,9 +175,11 @@
         throw error;
       }),
     ]);
+    if (version !== sessionVersion) return;
     S = state;
     nick = session?.username || '';
     signedIn = Boolean(nick);
+    if (!signedIn && $('msg').className === 'ok') say('Your Pi session ended. Please reconnect.');
     render();
     void refreshAccount();
   }
@@ -188,16 +197,18 @@
       // The server verifies the token directly with Pi Platform /v2/me.
       const session = await api('signin', { accessToken: a.accessToken });
       if (!session.username) throw new Error('The Pi account username could not be verified.');
-      signedIn = true;
-      nick = session.username;
+      const cookieSession = await api('signin', undefined, false).catch(() => null);
+      sessionToken = cookieSession?.username !== session.username && typeof session.sessionToken === 'string' ? session.sessionToken : '';
+      sessionVersion++;
+      await load();
+      if (!signedIn || nick !== session.username) throw new Error('Pi verified your username, but the app session did not start. Please reconnect.');
       if (window.__tenWinnersIncompletePayment) {
         const pending = window.__tenWinnersIncompletePayment;
         window.__tenWinnersIncompletePayment = null;
         await api('pay', { action: 'incomplete', paymentId: pending.identifier }).catch(() => {});
       }
-      await load();
       say('Connected to Pi as @' + nick + '.', 'ok');
-    } catch (e) { signedIn = false; say(e.message || 'Could not connect.', 'err'); }
+    } catch (e) { say(e.message || 'Could not connect.', 'err'); }
   }
 
   function buy(q) {

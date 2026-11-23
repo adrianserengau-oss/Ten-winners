@@ -1,9 +1,10 @@
 const { recordActivity } = require('./_lib/activity');
-const { r, pi, authUser, guard, createSessionCookie } = require('./_lib/core');
+const { r, pi, authUser, guard, createSessionCookie, createSessionToken } = require('./_lib/core');
 
 // Only the Pi Platform API can assert an account's identity.
 // In particular, never accept a nickname, UID or username supplied by the browser.
 module.exports = guard(async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
   if (req.method === 'GET') {
     const user = await authUser(req);
     if (!user) return res.status(401).json({ error: 'Not signed in.' });
@@ -24,14 +25,13 @@ module.exports = guard(async (req, res) => {
     throw e;
   }
   if (!identity || typeof identity.uid !== 'string' || !identity.uid ||
-      typeof identity.username !== 'string' || !identity.username) {
+      typeof identity.username !== 'string' || !identity.username.trim()) {
     return res.status(401).json({ error: 'Pi did not return a verified username.' });
   }
-  const user = { uid: identity.uid, username: identity.username };
+  const user = { uid: identity.uid, username: identity.username.trim() };
   // The existing draw history logic uses this map. Only verified Pi identities can update it.
   await r('HSET', 'nicks', user.uid, user.username);
-  res.setHeader('Cache-Control', 'no-store');
   await recordActivity(user.uid, 'sign_in');
   res.setHeader('Set-Cookie', createSessionCookie(user));
-  return res.json({ username: user.username });
+  return res.json({ username: user.username, sessionToken: createSessionToken(user, 3600, 'browser') });
 });
