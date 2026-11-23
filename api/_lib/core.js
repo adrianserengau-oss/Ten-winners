@@ -100,7 +100,7 @@ const nickOf = async (uid) => (await r('HGET', 'nicks', uid)) || 'Pioneer-' + ui
 async function issue(p) {
   const { ISSUE } = require('./ledger');
   const m = p.metadata || {}, id = m.round, qty = Number(m.qty), uid = p.user_uid;
-  if (typeof p.identifier !== 'string' || !/^[\\w-]{6,100}$/.test(p.identifier) ||
+  if (typeof p.identifier !== 'string' || !/^[A-Za-z0-9_-]{6,100}$/.test(p.identifier) ||
       typeof uid !== 'string' || !uid || !Number.isInteger(qty) || qty < 1 || qty > C.MAX ||
       Number(p.amount) !== qty * C.PRICE || p.direction !== 'user_to_app' ||
       !p.status?.developer_completed) throw bad('Invalid or incomplete Pi payment.');
