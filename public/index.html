@@ -10,7 +10,7 @@
 <link rel="icon" href="/gift.png" type="image/png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap">
-<link rel="stylesheet" href="/app.css?v=winner-avatar">
+<link rel="stylesheet" href="/app.css?v=history-chevron">
 </head>
 <body>
 <main>
@@ -106,9 +106,10 @@
   <p class="small">Round fingerprint <code id="commit">—</code></p>
 </section>
 
-<section class="card" id="history">
-  <h2>Past draws</h2>
-  <ul id="hist"><li class="muted">Loading draw history…</li></ul>
+<section class="card" id="history" data-history="hist">
+  <h2 class="history-heading"><span class="history-title">Past draws</span><button type="button" class="history-chevron" id="histToggle" aria-label="More past draws" aria-controls="histExpanded" aria-expanded="false" hidden></button></h2>
+  <ul id="hist" class="draw-history-list"><li class="muted">Loading draw history…</li></ul>
+  <div class="history-expanded" id="histExpanded" aria-hidden="true"><div><ul class="draw-history-list" id="histOlder"></ul></div></div>
 </section>
 
 <p class="small">Ten Winners is an independent app and is not affiliated with or endorsed by Pi Network. Check that games of chance are allowed where you live before you play.</p>
@@ -136,26 +137,27 @@
     <p class="small" id="avatarStatus" role="status"></p>
   </section>
   <div id="accountSections" hidden>
-    <section class="account-history">
-      <h3>Previous sign-ins</h3><p class="small" id="signInSummary"></p><ul id="accountActivity" class="activity-list"></ul>
-      <button type="button" class="mark-read" id="accountActivityToggle" aria-controls="accountActivity" aria-expanded="false" hidden>Show more</button>
+    <section class="account-history" data-history="accountActivity">
+      <h3 class="history-heading"><span class="history-title">Previous sign-ins</span><button type="button" class="history-chevron" id="accountActivityToggle" aria-label="More previous sign-ins" aria-controls="accountActivityExpanded" aria-expanded="false" hidden></button></h3><p class="small" id="signInSummary"></p><ul id="accountActivity" class="activity-list"></ul>
+      <div class="history-expanded" id="accountActivityExpanded" aria-hidden="true"><div><ul class="activity-list" id="accountActivityOlder"></ul></div></div>
     </section>
-    <section class="account-history">
-      <h3>Tickets purchased</h3><p class="small" id="ticketSummary"></p><ul id="accountTickets" class="activity-list"></ul>
-      <button type="button" class="mark-read" id="accountTicketsToggle" aria-controls="accountTickets" aria-expanded="false" hidden>Show more</button>
-      <details><summary>Itemized payments</summary><ul id="accountTransactions" class="activity-list"></ul>
-      <button type="button" class="mark-read" id="accountTransactionsToggle" aria-controls="accountTransactions" aria-expanded="false" hidden>Show more</button></details>
+    <section class="account-history" data-history="accountTickets">
+      <h3 class="history-heading"><span class="history-title">Tickets purchased</span><button type="button" class="history-chevron" id="accountTicketsToggle" aria-label="More tickets purchased" aria-controls="accountTicketsExpanded" aria-expanded="false" hidden></button></h3><p class="small" id="ticketSummary"></p><ul id="accountTickets" class="activity-list"></ul>
+      <div class="history-expanded" id="accountTicketsExpanded" aria-hidden="true"><div><ul class="activity-list" id="accountTicketsOlder"></ul></div></div>
+      <details class="itemized-history"><summary>Itemized payments</summary>
+        <div data-history="accountTransactions"><div class="history-heading"><button type="button" class="history-chevron" id="accountTransactionsToggle" aria-label="More itemized payments" aria-controls="accountTransactionsExpanded" aria-expanded="false" hidden></button></div><ul id="accountTransactions" class="activity-list"></ul><div class="history-expanded" id="accountTransactionsExpanded" aria-hidden="true"><div><ul class="activity-list" id="accountTransactionsOlder"></ul></div></div></div>
+      </details>
     </section>
-    <section class="account-history">
-      <h3>Refunds</h3><p class="small" id="refundSummary"></p><ul id="accountRefunds" class="activity-list"></ul>
-      <button type="button" class="mark-read" id="accountRefundsToggle" aria-controls="accountRefunds" aria-expanded="false" hidden>Show more</button>
+    <section class="account-history" data-history="accountRefunds">
+      <h3 class="history-heading"><span class="history-title">Refunds</span><button type="button" class="history-chevron" id="accountRefundsToggle" aria-label="More refunds" aria-controls="accountRefundsExpanded" aria-expanded="false" hidden></button></h3><p class="small" id="refundSummary"></p><ul id="accountRefunds" class="activity-list"></ul>
+      <div class="history-expanded" id="accountRefundsExpanded" aria-hidden="true"><div><ul class="activity-list" id="accountRefundsOlder"></ul></div></div>
     </section>
-    <section class="account-history">
-      <h3>Previous winnings</h3><p class="small" id="winningsSummary"></p><ul id="accountWinnings" class="activity-list"></ul>
-      <button type="button" class="mark-read" id="accountWinningsToggle" aria-controls="accountWinnings" aria-expanded="false" hidden>Show more</button>
+    <section class="account-history" data-history="accountWinnings">
+      <h3 class="history-heading"><span class="history-title">Previous winnings</span><button type="button" class="history-chevron" id="accountWinningsToggle" aria-label="More previous winnings" aria-controls="accountWinningsExpanded" aria-expanded="false" hidden></button></h3><p class="small" id="winningsSummary"></p><ul id="accountWinnings" class="activity-list"></ul>
+      <div class="history-expanded" id="accountWinningsExpanded" aria-hidden="true"><div><ul class="activity-list" id="accountWinningsOlder"></ul></div></div>
     </section>
   </div>
 </dialog>
-<script src="/app.js?v=history-preview"></script>
+<script src="/app.js?v=history-chevron"></script>
 </body>
 </html>

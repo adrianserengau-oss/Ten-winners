@@ -42,18 +42,34 @@
 
   function showHistory(id, expanded) {
     const button = $(id + 'Toggle');
-    const entries = Array.from($(id).children);
-    const hasMore = entries.length > historyPreviewSize;
-    expanded = hasMore && expanded;
+    const more = $(id + 'Expanded');
+    const hasMore = $(id + 'Older').children.length > 0;
+    const open = hasMore && expanded;
+    const card = button.closest('[data-history]');
+    card.classList.toggle('has-older-history', hasMore);
+    card.classList.toggle('history-open', open);
     button.hidden = !hasMore;
-    button.setAttribute('aria-expanded', String(expanded));
-    button.textContent = expanded ? 'Show less' : 'Show more';
-    entries.forEach((entry, index) => { entry.hidden = !expanded && index >= historyPreviewSize; });
+    button.setAttribute('aria-expanded', String(open));
+    more.setAttribute('aria-hidden', String(!open));
   }
 
-  for (const id of historyLists) {
+  function splitHistory(id) {
     const button = $(id + 'Toggle');
-    button.onclick = () => showHistory(id, button.getAttribute('aria-expanded') !== 'true');
+    $(id + 'Older').replaceChildren(...Array.from($(id).children).slice(historyPreviewSize));
+    showHistory(id, button.getAttribute('aria-expanded') === 'true');
+  }
+
+  for (const id of [...historyLists, 'hist']) {
+    const button = $(id + 'Toggle');
+    const card = button.closest('[data-history]');
+    const toggle = () => showHistory(id, button.getAttribute('aria-expanded') !== 'true');
+    button.onclick = toggle;
+    card.addEventListener('click', (event) => {
+      if (button.hidden || event.target.closest('[data-history]') !== card ||
+          event.target.closest('button, a, summary') ||
+          (id !== 'accountTransactions' && event.target.closest('details'))) return;
+      toggle();
+    });
   }
 
   function list(id, rows, empty) {
@@ -76,7 +92,7 @@
       }
       return item;
     }));
-    if (historyLists.includes(id)) showHistory(id, $(id + 'Toggle').getAttribute('aria-expanded') === 'true');
+    if (historyLists.includes(id)) splitHistory(id);
   }
 
   function renderAccount() {
@@ -105,6 +121,7 @@
       $('activityList').replaceChildren();
       for (const id of historyLists) {
         $(id).replaceChildren();
+        $(id + 'Older').replaceChildren();
         showHistory(id, false);
       }
       return;
@@ -177,6 +194,7 @@
     $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Refunds are queued.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their verified Pi usernames.';
     renderSlots(w, S.winners);
     $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, eligible pool ' + fmt(h.pool - h.fee) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
+    splitHistory('hist');
     $('connectBox').hidden = signedIn;
     $('buyBox').hidden = !signedIn;
     $('connected').hidden = !signedIn;
