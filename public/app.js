@@ -12,7 +12,7 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     const j = await x.json().catch(() => ({}));
-    if (!x.ok) throw new Error(j.error || 'Request failed.');
+    if (!x.ok) throw Object.assign(new Error(j.error || 'Request failed.'), { status: x.status });
     return j;
   }
   const say = (t, c) => { const m = $('msg'); m.textContent = t; m.className = c || ''; };
@@ -30,11 +30,9 @@
   function render() {
     const gross = S.tickets * S.price;
     const pool = gross * S.payout;
-    $('pool').textContent = fmt(pool);
-    $('tk').textContent = S.tickets;
-    $('share').textContent = fmt(pool / S.winners);
-    $('fee').textContent = fmt(gross - pool);
-    $('nd').textContent = new Date(S.nextDraw).toLocaleString([], { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    $('pool').textContent = fmt(pool) + ' π';
+    $('poolDetails').textContent = S.tickets + ' tickets sold · ' + fmt(pool / S.winners) + ' π per winning ticket';
+    $('nd').textContent = new Date(S.nextDraw).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
     $('commit').textContent = S.commit;
     $('mine').textContent = S.mine + ' / ' + S.max;
     $('odds').textContent = odds();
@@ -43,19 +41,42 @@
     bn.textContent = 'Test mode: payments use the Pi test environment and have no real value.';
     const last = S.history[0];
     const w = last && !last.cancelled ? last.winners : [];
-    $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Tickets are refunded.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their verified Pi usernames.';
-    $('slots').innerHTML = Array.from({ length: S.winners }, (_, i) => w[i] ? '<div class="slot won"><b>#' + w[i].n + '</b>' + esc(w[i].nick) + '</div>' : '<div class="slot"><b>–</b>open</div>').join('');
-    $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, pool ' + fmt(h.pool) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
+    $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Refunds are queued.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their verified Pi usernames.';
+    renderSlots(w, S.winners);
+    $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, eligible pool ' + fmt(h.pool - h.fee) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
     $('connectBox').hidden = signedIn;
     $('buyBox').hidden = !signedIn;
-    $('piUsername').textContent = signedIn ? nick : '';
+    $('connected').hidden = !signedIn;
+    $('piUsername').textContent = signedIn ? '@' + nick : '';
+    $('ticketLimit').textContent = 'Current limit: ' + S.max + ' tickets per account per draw.';
     $('paymentNotice').hidden = !!S.purchasesEnabled;
     document.querySelectorAll('[data-buy]').forEach((b) => {
-      b.disabled = !signedIn || !S.purchasesEnabled || S.mine + +b.dataset.buy > S.max;
+      const quantity = Number(b.dataset.buy);
+      b.querySelector('span').textContent = fmt(quantity * S.price) + ' π';
+      b.disabled = !signedIn || !S.purchasesEnabled || S.mine + quantity > S.max;
     });
   }
 
-  async function load() { S = await api('state'); render(); }
+  function renderSlots(winners, count) {
+    $('slots').innerHTML = Array.from({ length: count }, (_, index) => {
+      const winner = winners[index];
+      return '<li class="slot"><b>' + (index + 1) + '</b><span>' + (winner ? esc(winner.nick) : '—') + '</span></li>';
+    }).join('');
+  }
+
+  async function load() {
+    const [state, session] = await Promise.all([
+      api('state'),
+      api('signin').catch((error) => {
+        if (error.status === 401) return null;
+        throw error;
+      }),
+    ]);
+    S = state;
+    nick = session?.username || '';
+    signedIn = Boolean(nick);
+    render();
+  }
 
   async function connect() {
     if (!inPi()) return say('Open this app in the Pi Browser to connect and buy tickets.', 'err');
@@ -84,7 +105,8 @@
 
   function buy(q) {
     if (!signedIn || !nick) return say('Connect your verified Pi account first.', 'err');
-    if (!S.purchasesEnabled) return say('Ticket purchases are paused until payment safety testing is finished.', 'err');
+    if (!S?.purchasesEnabled) return say('Ticket purchases are paused until payment safety testing is finished.', 'err');
+    if (!Number.isInteger(q) || q < 1 || S.mine + q > S.max) return say('That option exceeds your remaining tickets for this draw.', 'err');
     say('Opening Pi Wallet…');
     try {
       Promise.resolve(window.Pi.createPayment(
@@ -116,8 +138,9 @@
   }
 
   (async () => {
+    renderSlots([], 10);
     try { await load(); } catch (e) { say('Could not load the game. Please refresh.', 'err'); return; }
-    if (!inPi()) say('You are viewing in a regular browser. Open this app in the Pi Browser to buy tickets.');
+    if (!inPi() && !signedIn) say('Open this app in Pi Browser to connect your account.');
     setInterval(() => load().catch(() => {}), 60000);
   })();
 })();
