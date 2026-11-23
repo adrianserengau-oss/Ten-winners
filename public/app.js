@@ -7,6 +7,7 @@
   // Some Pi Browser sessions do not return the session cookie. Keep the fallback in memory.
   let sessionToken = '';
   let sessionVersion = 0;
+  let sessionChecked = false;
 
   async function api(path, body, useFallback = true) {
     const headers = { 'Content-Type': 'application/json' };
@@ -15,6 +16,7 @@
       method: body ? 'POST' : 'GET',
       headers,
       credentials: 'same-origin',
+      cache: 'no-store',
       body: body ? JSON.stringify(body) : undefined,
     });
     const j = await x.json().catch(() => ({}));
@@ -76,9 +78,10 @@
     $('notificationDot').hidden = unread === 0;
     $('notifications').querySelector('summary').setAttribute('aria-label', unread ? 'Notifications, ' + unread + ' unread' : 'Notifications');
     $('markRead').hidden = unread === 0;
-    $('accountConnect').hidden = signedIn;
+    $('accountSignedOut').hidden = !sessionChecked || signedIn;
     $('accountSections').hidden = !data;
-    $('accountStatus').textContent = !signedIn ? 'Connect with Pi to see your account.'
+    $('accountStatus').textContent = !sessionChecked ? 'Checking your Pi session…'
+      : !signedIn ? 'Connect with Pi to see your account.'
       : 'Verified Pi account · @' + nick + (accountError ? ' · Could not refresh history' : data ? '' : ' · Loading history…');
     $('activityStatus').textContent = !signedIn ? 'Connect with Pi to see your notifications.'
       : accountError ? 'Could not refresh account activity. Try reopening this menu.'
@@ -109,7 +112,8 @@
     if (!signedIn) { accountData = null; renderAccount(); return; }
     try {
       const data = await api('account');
-      if (username !== nick || !signedIn || data.username !== username) return;
+      if (username !== nick || !signedIn) return;
+      if (data.username !== username) throw new Error('Account history does not match the current session.');
       accountData = data;
       accountError = false;
     } catch {
@@ -145,11 +149,11 @@
     $('lastinfo').textContent = last ? (last.cancelled ? 'The ' + last.id + ' draw was cancelled (fewer than 10 tickets). Refunds are queued.' : 'Draw of ' + last.id + '. Each winner receives ' + fmt(last.share) + ' π.') : 'Winners are shown by their verified Pi usernames.';
     renderSlots(w, S.winners);
     $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, eligible pool ' + fmt(h.pool - h.fee) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
-    renderAccount();
     $('connectBox').hidden = signedIn;
     $('buyBox').hidden = !signedIn;
     $('connected').hidden = !signedIn;
     $('piUsername').textContent = signedIn ? '@' + nick : '';
+    renderAccount();
     $('ticketLimit').textContent = 'Current limit: ' + S.max + ' tickets per account per draw.';
     $('paymentNotice').hidden = !!S.purchasesEnabled;
     document.querySelectorAll('[data-buy]').forEach((b) => {
@@ -179,6 +183,7 @@
     S = state;
     nick = session?.username || '';
     signedIn = Boolean(nick);
+    sessionChecked = true;
     if (!signedIn && $('msg').className === 'ok') say('Your Pi session ended. Please reconnect.');
     render();
     void refreshAccount();
@@ -279,7 +284,11 @@
 
   (async () => {
     renderSlots([], 10);
-    try { await load(); } catch (e) { say('Could not load the game. Please refresh.', 'err'); return; }
+    try { await load(); } catch (e) {
+      $('accountStatus').textContent = 'Could not check your Pi session. Please refresh.';
+      say('Could not load the game. Please refresh.', 'err');
+      return;
+    }
     if (!inPi() && !signedIn) say('Open this app in Pi Browser to connect your account.');
     setInterval(() => load().catch(() => {}), 60000);
   })();

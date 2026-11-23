@@ -10,7 +10,7 @@
 <link rel="icon" href="/gift.png" type="image/png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap">
-<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/app.css?v=account-session">
 </head>
 <body>
 <main>
@@ -34,8 +34,10 @@
       <summary class="profile-link" aria-label="Pi account"><span class="person-icon" aria-hidden="true"></span></summary>
       <section class="notification-panel account-panel" aria-labelledby="accountTitle">
         <h2 id="accountTitle">Pi Account</h2>
-        <p class="small" id="accountStatus">Connect with Pi to see your account.</p>
-        <a class="history-link" id="accountConnect" href="#participation">Go to Pi sign-in</a>
+        <p class="small" id="accountStatus" role="status">Checking your Pi session…</p>
+        <div id="accountSignedOut" hidden>
+          <a class="history-link" id="accountConnect" href="#participation">Go to Pi sign-in</a>
+        </div>
         <div id="accountSections" hidden>
           <h3>Tickets purchased by draw</h3><ul id="accountTickets" class="activity-list"></ul>
           <h3>Payment transactions</h3><ul id="accountTransactions" class="activity-list"></ul>
@@ -125,6 +127,6 @@
 
 <p class="small">Ten Winners is an independent app and is not affiliated with or endorsed by Pi Network. Check that games of chance are allowed where you live before you play.</p>
 </main>
-<script src="/app.js"></script>
+<script src="/app.js?v=account-session"></script>
 </body>
 </html>
