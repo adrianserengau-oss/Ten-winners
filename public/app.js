@@ -37,6 +37,25 @@
 
   const count = (n, unit) => n + ' ' + unit + (n === 1 ? '' : 's');
 
+  const historyLists = ['accountActivity', 'accountTickets', 'accountTransactions', 'accountRefunds', 'accountWinnings'];
+  const historyPreviewSize = 3;
+
+  function showHistory(id, expanded) {
+    const button = $(id + 'Toggle');
+    const entries = Array.from($(id).children);
+    const hasMore = entries.length > historyPreviewSize;
+    expanded = hasMore && expanded;
+    button.hidden = !hasMore;
+    button.setAttribute('aria-expanded', String(expanded));
+    button.textContent = expanded ? 'Show less' : 'Show more';
+    entries.forEach((entry, index) => { entry.hidden = !expanded && index >= historyPreviewSize; });
+  }
+
+  for (const id of historyLists) {
+    const button = $(id + 'Toggle');
+    button.onclick = () => showHistory(id, button.getAttribute('aria-expanded') !== 'true');
+  }
+
   function list(id, rows, empty) {
     $(id).replaceChildren(...(rows.length ? rows : [{ title: empty }]).map((row) => {
       const item = document.createElement('li');
@@ -57,6 +76,7 @@
       }
       return item;
     }));
+    if (historyLists.includes(id)) showHistory(id, $(id + 'Toggle').getAttribute('aria-expanded') === 'true');
   }
 
   function renderAccount() {
@@ -82,7 +102,11 @@
       : accountError ? 'Could not refresh account activity. Try reopening this menu.'
       : !data ? 'Loading your notifications…' : notifications.length ? unread + ' unread' : 'Draw results and your wins will appear here.';
     if (!data) {
-      for (const id of ['activityList', 'accountTickets', 'accountTransactions', 'accountWinnings', 'accountRefunds', 'accountActivity']) $(id).replaceChildren();
+      $('activityList').replaceChildren();
+      for (const id of historyLists) {
+        $(id).replaceChildren();
+        showHistory(id, false);
+      }
       return;
     }
     list('activityList', notifications.map((item) => ({ title: activityLabel(item), at: item.at, unread: !item.read })), 'No notifications yet.');
@@ -315,6 +339,7 @@
   });
   $('openAccount').onclick = () => {
     notificationsMenu.open = false;
+    for (const id of historyLists) showHistory(id, false);
     accountDrawer.showModal();
     void refreshAccount();
   };
