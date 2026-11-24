@@ -1,65 +1,104 @@
 const { recordActivity } = require('./_lib/activity');
-const { C, r, pi, nextDraw, rid, issue, authUser, guard, bad } = require('./_lib/core');
+const { C, r, pi, nextDraw, rid, isWeeklyRound, issue, authUser, guard, bad } = require('./_lib/core');
+const { purchasesEnabled } = require('./_lib/sandbox');
 
-// U2A payment flow (Pi docs): approve -> user signs in Pi Wallet -> complete.
-// Everything is re-checked against the Platform API; nothing sent by the browser is trusted.
-async function approve(paymentId, uid) {
-  // No new paid entries until atomic ticket crediting and payout settlement are implemented.
-  throw bad('Ticket purchases are temporarily unavailable while payment safety checks are completed.');
-  const p = await pi('/payments/' + paymentId, { key: 1 });
-  if (p.user_uid !== uid) throw bad('This payment does not belong to the signed-in user.');
-  const m = p.metadata || {}, qty = +m.qty, id = rid(nextDraw());
-  const have = +(await r('HGET', 'cnt:' + id, p.user_uid)) || 0;
-  const ok = p.direction === 'user_to_app' && m.round === id && Number.isInteger(qty) && qty >= 1 && qty <= C.MAX
-    && Number(p.amount) === qty * C.PRICE && have + qty <= C.MAX;
-  if (!ok) { await pi('/payments/' + paymentId + '/cancel', { method: 'POST', key: 1 }).catch(() => {}); throw bad('This purchase is not valid for the current round.'); }
-  await pi('/payments/' + paymentId + '/approve', { method: 'POST', key: 1 });
+const validId = (value) => typeof value === 'string' && /^[\w-]{6,100}$/.test(value);
+const validTx = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const pendingKey = (uid) => 'sandbox:payments:pending:' + uid;
+
+async function payment(path, body) {
+  return pi('/payments/' + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    key: process.env.PI_SANDBOX_API_KEY,
+    body,
+  });
 }
 
-async function complete(paymentId, txid, uid) {
-  const p = await pi('/payments/' + paymentId, { key: 1 });
-  if (p.user_uid !== uid) throw bad('This payment does not belong to the signed-in user.');
-  if (p.direction !== 'user_to_app' || !p.metadata || !Number.isInteger(Number(p.metadata.qty)) ||
-      Number(p.metadata.qty) < 1 || Number(p.metadata.qty) > C.MAX ||
-      Number(p.amount) !== Number(p.metadata.qty) * C.PRICE) {
-    throw bad('Payment metadata does not match a valid ticket purchase.');
+function verifyPurchase(p, id, uid) {
+  if (p?.identifier !== id || p.user_uid !== uid || p.network !== 'Pi Testnet' ||
+      p.direction !== 'user_to_app' || !C.BUNDLES.includes(p.metadata?.qty) ||
+      typeof p.metadata.round !== 'string' || !isWeeklyRound(p.metadata.round) || p.metadata.round > rid(nextDraw()) ||
+      p.amount !== p.metadata.qty * C.PRICE ||
+      p.status?.cancelled !== false || p.status.user_cancelled !== false) {
+    throw bad('Pi did not return a valid Sandbox ticket purchase for this account.');
   }
-  if (p.status && p.status.cancelled) throw bad('Payment was cancelled.');
-  if (p.transaction && p.transaction.txid && p.transaction.txid !== txid) throw bad('Transaction ID does not match the Pi payment.');
-  if (!p.status || !p.status.developer_completed) {
-    await pi('/payments/' + paymentId + '/complete', { method: 'POST', key: 1, body: { txid } });
+}
+
+async function approve(id, uid, p) {
+  const { round, qty } = p.metadata;
+  if (round !== rid(nextDraw()) || p.transaction !== null || p.status.developer_completed !== false ||
+      typeof p.status.developer_approved !== 'boolean') {
+    throw bad('This payment cannot be approved for the current draw.');
   }
-  const verified = await pi('/payments/' + paymentId, { key: 1 });
-  if (verified.user_uid !== uid || verified.direction !== 'user_to_app' ||
-      !verified.status || !verified.status.developer_completed ||
-      !verified.transaction || verified.transaction.txid !== txid ||
-      verified.metadata?.round !== p.metadata.round ||
-      Number(verified.metadata?.qty) !== Number(p.metadata.qty) ||
-      Number(verified.amount) !== Number(p.amount)) {
-    throw new Error('Payment completion could not be independently verified.');
+  const have = Number(await r('HGET', 'cnt:' + round, uid) || 0);
+  if (!Number.isSafeInteger(have) || have < 0 || have + qty > C.SANDBOX_MAX) {
+    throw bad('This purchase exceeds the ticket limit for the draw.');
   }
-  return issue(verified);
+  if (p.status.developer_approved !== true) await payment(id + '/approve', {});
+  return 'approved';
+}
+
+async function complete(id, uid, p, txid) {
+  if (!validTx(txid) || p.transaction?.txid !== txid || p.status.developer_approved !== true) {
+    throw bad('The submitted transaction does not match the Pi payment.');
+  }
+  // Keep a durable recovery entry before Pi can mark the payment complete.
+  await r('SADD', pendingKey(uid), id);
+  if (p.status.developer_completed !== true) {
+    try {
+      await payment(id + '/complete', { txid });
+    } catch (error) {
+      // A concurrent request or a lost response can leave the payment completed.
+      const current = await payment(id);
+      if (current?.status?.developer_completed !== true) throw error;
+    }
+  }
+  const verified = await payment(id);
+  verifyPurchase(verified, id, uid);
+  if (verified.metadata.round !== p.metadata.round || verified.metadata.qty !== p.metadata.qty ||
+      verified.status.developer_approved !== true || verified.status.developer_completed !== true ||
+      verified.status.transaction_verified !== true || verified.transaction?.verified !== true ||
+      verified.transaction.txid !== txid) {
+    throw bad('Pi has not verified payment completion. Reconnect to retry ticket crediting.');
+  }
+  return issue(verified, pendingKey(uid));
+}
+
+async function resolve(id, uid, action, txid) {
+  const p = await payment(id);
+  if (action === 'incomplete' && p?.identifier === id && p.user_uid === uid &&
+      p.network === 'Pi Testnet' && p.direction === 'user_to_app' &&
+      (p.status?.cancelled === true || p.status?.user_cancelled === true)) {
+    await r('SREM', pendingKey(uid), id);
+    return 'cancelled';
+  }
+  verifyPurchase(p, id, uid);
+  if (action === 'approve') return approve(id, uid, p);
+  if (action === 'incomplete' && p.transaction === null) return 'pending';
+  return complete(id, uid, p, action === 'incomplete' ? p.transaction?.txid : txid);
 }
 
 module.exports = guard(async (req, res) => {
+  if (!purchasesEnabled()) return res.status(403).json({ error: 'Ticket purchases are available only in the Pi Sandbox.' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   const user = await authUser(req);
   if (!user) return res.status(401).json({ error: 'Pi sign-in is required.' });
   const { action, paymentId, txid } = req.body || {};
-  if (req.method !== 'POST' || !/^[\w-]{6,100}$/.test(paymentId || '')) throw bad('Bad request.');
+  if (action === 'recover') {
+    const ids = await r('SMEMBERS', pendingKey(user.uid));
+    const recovered = await Promise.allSettled(ids.map((id) => resolve(id, user.uid, 'incomplete')));
+    return res.json({
+      results: recovered.filter((entry) => entry.status === 'fulfilled').map((entry) => entry.value),
+      retryPending: recovered.some((entry) => entry.status === 'rejected' || entry.value === 'pending'),
+    });
+  }
+
+  if (!['approve', 'complete', 'incomplete'].includes(action) || !validId(paymentId) ||
+      (action === 'complete' && !validTx(txid))) throw bad('Bad payment request.');
   try {
-    if (action === 'approve') await approve(paymentId, user.uid);
-    else if (action === 'complete') { if (typeof txid !== 'string' || !/^[a-zA-Z0-9_-]{6,150}$/.test(txid)) throw bad('Invalid transaction id.'); res.setHeader('X-Result', await complete(paymentId, txid, user.uid)); }
-    else if (action === 'incomplete') { // payment left unfinished from an earlier session
-      const p = await pi('/payments/' + paymentId, { key: 1 });
-      if (p.user_uid !== user.uid) throw bad('This payment does not belong to the signed-in user.');
-      if (p.transaction && p.transaction.txid) await complete(paymentId, p.transaction.txid, user.uid);
-      else if (!p.status.developer_completed && !p.status.cancelled) await pi('/payments/' + paymentId + '/cancel', { method: 'POST', key: 1 });
-    } else throw bad('Unknown action.');
+    return res.json({ result: await resolve(paymentId, user.uid, action, txid) });
   } catch (error) {
-    if (['approve', 'complete', 'incomplete'].includes(action)) {
-      await recordActivity(user.uid, 'payment_failure', true).catch(() => {});
-    }
+    await recordActivity(user.uid, 'payment_failure', true).catch(() => {});
     throw error;
   }
-  res.json({ ok: true });
 });

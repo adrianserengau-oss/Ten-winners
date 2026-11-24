@@ -3,6 +3,7 @@
   const esc = (t) => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
   const fmt = (n) => (+n).toFixed(4).replace(/\.?0+$/, '');
   let S, signedIn = false, nick = '', piReady = null;
+  let sdkSandbox = false, walletBusy = false, sandboxAuthorized = false, pendingPaymentId;
 
   // Some Pi Browser sessions do not return the session cookie. Keep the fallback in memory.
   let sessionToken = '';
@@ -195,7 +196,7 @@
     renderSlots(w, S.winners);
     $('hist').innerHTML = S.history.length ? S.history.map((h) => '<li><b>' + esc(h.id) + '</b>: ' + (h.cancelled ? 'cancelled, ' + h.tickets + ' tickets refunded' : h.tickets + ' tickets, eligible pool ' + fmt(h.pool - h.fee) + ' π, ' + fmt(h.share) + ' π per winner, ' + fmt(h.fee) + ' π for organizing the game') + '<br><span class="muted">Seed: <code>' + esc(h.seed) + '</code></span></li>').join('') : '<li class="muted">No draws yet.</li>';
     splitHistory('hist');
-    $('connectBox').hidden = signedIn;
+    $('connectBox').hidden = signedIn && (!S.purchasesEnabled || sandboxAuthorized);
     $('buyBox').hidden = !signedIn;
     $('connected').hidden = !signedIn;
     $('piUsername').textContent = signedIn ? '@' + nick : '';
@@ -205,7 +206,8 @@
     document.querySelectorAll('[data-buy]').forEach((b) => {
       const quantity = Number(b.dataset.buy);
       b.querySelector('.ticket-price').textContent = fmt(quantity * S.price) + ' π';
-      b.disabled = !signedIn || !S.purchasesEnabled || S.mine + quantity > S.max;
+      b.disabled = !signedIn || !sdkSandbox || !sandboxAuthorized || !S.purchasesEnabled || walletBusy ||
+        !S.bundles?.includes(quantity) || S.mine + quantity > S.max;
     });
   }
 
@@ -280,10 +282,10 @@
     }
   }
 
-  async function load() {
+  async function load(stateRequest = api('state')) {
     const version = sessionVersion;
     const [state, session] = await Promise.all([
-      api('state'),
+      stateRequest,
       api('signin').catch((error) => {
         if (error.status === 401) return null;
         throw error;
@@ -301,12 +303,17 @@
 
   async function connect() {
     if (!inPi()) return say('Open this app in the Pi Browser to connect and buy tickets.', 'err');
+    if ($('connect').disabled) return;
+    $('connect').disabled = true;
+    pendingPaymentId = null;
     try {
       if (!piReady) throw new Error('Pi SDK is unavailable. Please refresh in Pi Browser.');
       await piReady;
-      const a = await window.Pi.authenticate(['username', 'payments'], (p) => {
-        // Incomplete payments are resolved after sign-in has established the app session.
-        window.__tenWinnersIncompletePayment = p;
+      const a = await window.Pi.authenticate(sdkSandbox ? ['username', 'payments'] : ['username'], (p) => {
+        pendingPaymentId = p?.identifier;
+        if (walletBusy && sdkSandbox && S?.purchasesEnabled && pendingPaymentId) {
+          void settlePayment({ action: 'incomplete', paymentId: pendingPaymentId });
+        }
       });
       if (!a || typeof a.accessToken !== 'string' || !a.accessToken) throw new Error('Pi did not return an access token. Please try signing in again.');
       // The server verifies the token directly with Pi Platform /v2/me.
@@ -317,31 +324,85 @@
       sessionVersion++;
       await load();
       if (!signedIn || nick !== session.username) throw new Error('Pi verified your username, but the app session did not start. Please reconnect.');
-      if (window.__tenWinnersIncompletePayment) {
-        const pending = window.__tenWinnersIncompletePayment;
-        window.__tenWinnersIncompletePayment = null;
-        await api('pay', { action: 'incomplete', paymentId: pending.identifier }).catch(() => {});
+      if (sdkSandbox && S.purchasesEnabled) {
+        const pending = pendingPaymentId;
+        const recovered = await api('pay', { action: 'recover' });
+        const result = pending
+          ? (await api('pay', { action: 'incomplete', paymentId: pending })).result
+          : null;
+        pendingPaymentId = null;
+        if (recovered.retryPending || result === 'pending') {
+          throw new Error('A Sandbox payment is still pending. Reconnect to check its status.');
+        }
+        sandboxAuthorized = true;
+        render();
+        const results = [...recovered.results, result];
+        if (results.includes('ok') || results.includes('refund')) {
+          await load();
+          return reportPayment(results.includes('refund') ? 'refund' : 'ok');
+        }
       }
       say('Connected to Pi as @' + nick + '.', 'ok');
-    } catch (e) { say(e.message || 'Could not connect.', 'err'); }
+    } catch (e) {
+      sandboxAuthorized = false;
+      if (S) render();
+      say(e.message || 'Could not connect.', 'err');
+    } finally {
+      $('connect').disabled = false;
+    }
+  }
+
+  function reportPayment(result) {
+    if (result === 'ok') say('Sandbox tickets credited.', 'ok');
+    else if (result === 'refund') say('Sandbox payment verified. A test refund is pending.', 'err');
+    else {
+      sandboxAuthorized = false;
+      say('Sandbox payment is pending. Reconnect to check its status.', 'err');
+    }
+  }
+
+  function finishPayment() {
+    walletBusy = false;
+    render();
+  }
+
+  async function settlePayment(request) {
+    try {
+      const { result } = await api('pay', request);
+      await load();
+      reportPayment(result);
+    } catch (error) {
+      sandboxAuthorized = false;
+      say(error.message + ' Reconnect to check the payment.', 'err');
+    } finally {
+      finishPayment();
+    }
   }
 
   function buy(q) {
     if (!signedIn || !nick) return say('Connect your verified Pi account first.', 'err');
-    if (!S?.purchasesEnabled) return say('Ticket purchases are paused until payment safety testing is finished.', 'err');
-    if (!Number.isInteger(q) || q < 1 || S.mine + q > S.max) return say('That option exceeds your remaining tickets for this draw.', 'err');
+    if (!sdkSandbox || !S?.purchasesEnabled) return say('Ticket purchases are available only in the Pi Sandbox.', 'err');
+    if (walletBusy || !sandboxAuthorized) return;
+    if (!S.bundles?.includes(q) || S.mine + q > S.max) return say('That option exceeds your remaining tickets for this draw.', 'err');
+    const onError = (error) => {
+      sandboxAuthorized = false;
+      finishPayment();
+      say(error?.message || 'Pi Wallet could not open.', 'err');
+    };
+    walletBusy = true;
+    render();
     say('Opening Pi Wallet…');
     try {
       Promise.resolve(window.Pi.createPayment(
       { amount: q * S.price, memo: 'Ten Winners: ' + q + ' ticket' + (q > 1 ? 's' : '') + ' for the ' + S.round + ' draw', metadata: { qty: q, round: S.round } },
       {
-        onReadyForServerApproval: (id) => api('pay', { action: 'approve', paymentId: id }).catch((e) => say(e.message, 'err')),
-        onReadyForServerCompletion: (id, txid) => api('pay', { action: 'complete', paymentId: id, txid }).then(() => { say('Payment processed. Ticket crediting is pending verification; contact support before retrying.', 'err'); return load(); }).catch((e) => say(e.message, 'err')),
-        onCancel: () => say('Payment cancelled.'),
-        onError: walletError,
+        onReadyForServerApproval: (id) => api('pay', { action: 'approve', paymentId: id }).catch(onError),
+        onReadyForServerCompletion: (id, txid) => settlePayment({ action: 'complete', paymentId: id, txid }),
+        onCancel: () => { finishPayment(); say('Payment cancelled.'); },
+        onError,
       }
-      )).catch((e) => say(e.message || 'Pi Wallet could not open.', 'err'));
-    } catch (e) { say(e.message || 'Pi Wallet could not open.', 'err'); }
+      )).catch(onError);
+    } catch (e) { onError(e); }
   }
 
   const notificationsMenu = $('notifications');
@@ -400,11 +461,14 @@
   $('connect').onclick = connect;
   document.querySelectorAll('[data-buy]').forEach((b) => (b.onclick = () => buy(+b.dataset.buy)));
 
-  // Initialize the Pi SDK exactly once, and wait for it before allowing authentication.
-  // The SDK detects sandbox mode automatically; do not pass a sandbox option to Pi.init.
+  const initialState = api('state');
+  // Use the server's environment for SDK initialization.
   if (inPi()) {
     piReady = (async () => {
-      await window.Pi.init({ version: '2.0' });
+      const state = await initialState;
+      await window.Pi.init({ version: '2.0', sandbox: state.sandbox === true });
+      sdkSandbox = state.sandbox === true;
+      if (S) render();
       return true;
     })();
     piReady.catch((e) => {
@@ -415,7 +479,7 @@
 
   (async () => {
     renderSlots([], 10);
-    try { await load(); } catch (e) {
+    try { await load(initialState); } catch (e) {
       $('accountStatus').textContent = 'Could not check your Pi session. Please refresh.';
       say('Could not load the game. Please refresh.', 'err');
       return;

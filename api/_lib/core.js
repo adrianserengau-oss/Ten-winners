@@ -1,7 +1,8 @@
 const crypto = require('crypto');
+const { sandboxDeployment, purchasesEnabled } = require('./sandbox');
 
 // ---- Weekly Sunday 20:00 UTC draw (keep vercel.json cron synchronized) ----
-const C = { PRICE: 1, WINNERS: 10, MAX: 10, PAYOUT: 0.9, DRAW_HOUR_UTC: 20 };
+const C = { PRICE: 1, WINNERS: 10, MAX: 10, SANDBOX_MAX: 100, BUNDLES: [1, 5, 10, 25, 50, 100], PAYOUT: 0.9, DRAW_HOUR_UTC: 20 };
 
 const RU = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const RT = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -9,16 +10,20 @@ const PI = 'https://api.minepi.com/v2';
 
 // Upstash Redis over REST: no npm packages needed
 async function r(...cmd) {
-  const x = await fetch(RU, { method: 'POST', headers: { Authorization: 'Bearer ' + RT }, body: JSON.stringify(cmd) });
+  const sandbox = sandboxDeployment();
+  const url = sandbox ? process.env.PI_SANDBOX_REDIS_URL : RU;
+  const token = sandbox ? process.env.PI_SANDBOX_REDIS_TOKEN : RT;
+  if (!url || !token) throw new Error('Redis is not configured for this environment.');
+  const x = await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify(cmd) });
   const j = await x.json();
-  if (j.error) throw new Error('Redis: ' + j.error);
+  if (!x.ok || j.error || !Object.hasOwn(j, 'result')) throw new Error('Redis command failed.');
   return j.result;
 }
 
 // Pi Platform API: key = Server API Key auth, token = user access token auth
 async function pi(path, { method = 'GET', key, token, body } = {}) {
   const h = { 'Content-Type': 'application/json' };
-  if (key) h.Authorization = 'Key ' + process.env.PI_API_KEY;
+  if (key) h.Authorization = 'Key ' + key;
   if (token) h.Authorization = 'Bearer ' + token;
   const x = await fetch(PI + path, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
   const t = await x.text();
@@ -106,16 +111,22 @@ async function authUser(req) {
 const nickOf = async (uid) => (await r('HGET', 'nicks', uid)) || 'Pioneer-' + uid.slice(0, 4);
 
 // Payment credits and draw publication use Redis Lua transactions; no partial ledger writes.
-async function issue(p) {
+async function issue(p, pending) {
   const { ISSUE } = require('./ledger');
-  const m = p.metadata || {}, id = m.round, qty = Number(m.qty), uid = p.user_uid;
+  const m = p.metadata || {}, id = m.round, qty = m.qty, uid = p.user_uid;
+  if (!purchasesEnabled()) throw bad('Sandbox purchases are disabled.');
   if (typeof p.identifier !== 'string' || !/^[A-Za-z0-9_-]{6,100}$/.test(p.identifier) ||
-      typeof uid !== 'string' || !uid || !Number.isInteger(qty) || qty < 1 || qty > C.MAX ||
-      Number(p.amount) !== qty * C.PRICE || p.direction !== 'user_to_app' ||
-      !p.status?.developer_completed) throw bad('Invalid or incomplete Pi payment.');
+      typeof uid !== 'string' || !uid || !C.BUNDLES.includes(qty) ||
+      p.amount !== qty * C.PRICE || p.network !== 'Pi Testnet' || p.direction !== 'user_to_app' ||
+      p.status?.developer_completed !== true || p.status.transaction_verified !== true ||
+      p.transaction?.verified !== true) throw bad('Invalid or incomplete Pi payment.');
   if (typeof id !== 'string' || !isWeeklyRound(id)) throw bad('Invalid draw round.');
   // The published cutoff is authoritative even for already-finished payments.
-  return r('EVAL', ISSUE, 0, p.identifier, id, uid, qty, dueAt(id), Date.now(), C.MAX, new Date().toISOString(), C.PRICE);
+  const result = await r('EVAL', ISSUE, 0, p.identifier, id, uid, qty, dueAt(id), C.SANDBOX_MAX,
+    new Date().toISOString(), C.PRICE, p.transaction.txid);
+  if (!['ok', 'refund'].includes(result)) throw bad('The transaction is already attached to another payment.');
+  await r('SREM', pending, p.identifier);
+  return result;
 }
 
 async function draw(id) {
