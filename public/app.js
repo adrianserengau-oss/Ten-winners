@@ -202,7 +202,14 @@
     $('piUsername').textContent = signedIn ? '@' + nick : '';
     renderAccount();
     $('ticketLimit').textContent = 'Current limit: ' + S.max + ' tickets per account per draw.';
-    $('paymentNotice').hidden = !!S.purchasesEnabled;
+    const purchaseNotice = $('paymentNotice');
+    purchaseNotice.hidden = !!S.purchasesEnabled;
+    purchaseNotice.textContent = ({
+      disabled: 'Sandbox purchases are off. Set PI_SANDBOX_PURCHASES to true in Preview.',
+      missing_pi_key: 'Sandbox purchases are off. PI_SANDBOX_API_KEY is missing in Preview.',
+      missing_redis: 'Sandbox purchases are off. Check the Sandbox Redis URL and token in Preview.',
+      shared_redis: 'Sandbox purchases are off. The Sandbox Redis URL matches the existing app database.',
+    })[S.purchaseBlocker] || 'Ticket purchases are available only in the Pi Sandbox.';
     document.querySelectorAll('[data-buy]').forEach((b) => {
       const quantity = Number(b.dataset.buy);
       b.querySelector('.ticket-price').textContent = fmt(quantity * S.price) + ' π';

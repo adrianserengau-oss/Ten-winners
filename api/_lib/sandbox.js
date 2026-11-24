@@ -7,13 +7,18 @@ function sandboxDeployment(env = process.env) {
   return env.NODE_ENV === 'development';
 }
 
-function purchasesEnabled(env = process.env) {
+function purchaseBlocker(env = process.env) {
+  if (!sandboxDeployment(env)) return 'outside_sandbox';
+  if (env.PI_SANDBOX_PURCHASES !== 'true') return 'disabled';
+  if (!env.PI_SANDBOX_API_KEY?.trim()) return 'missing_pi_key';
   const sandboxRedis = env.PI_SANDBOX_REDIS_URL?.trim().replace(/\/+$/, '');
-  return Boolean(sandboxDeployment(env) && env.PI_SANDBOX_PURCHASES === 'true' &&
-    env.PI_SANDBOX_API_KEY?.trim() && sandboxRedis && env.PI_SANDBOX_REDIS_TOKEN?.trim() &&
-    [env.KV_REST_API_URL, env.UPSTASH_REDIS_REST_URL].every(
-      (url) => url?.trim().replace(/\/+$/, '') !== sandboxRedis
-    ));
+  if (!sandboxRedis || !env.PI_SANDBOX_REDIS_TOKEN?.trim()) return 'missing_redis';
+  if ([env.KV_REST_API_URL, env.UPSTASH_REDIS_REST_URL].some(
+    (url) => url?.trim().replace(/\/+$/, '') === sandboxRedis
+  )) return 'shared_redis';
+  return null;
 }
 
-module.exports = { sandboxDeployment, purchasesEnabled };
+const purchasesEnabled = (env) => purchaseBlocker(env) === null;
+
+module.exports = { sandboxDeployment, purchasesEnabled, purchaseBlocker };
